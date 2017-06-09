@@ -1,0 +1,149 @@
+###############################################################################
+#Load libraries and functions
+#
+source('./exrna_atlas_functions.R',echo = F)
+################################################################################
+
+################################################################################
+#Load the Atlas Summary Read counts for the 345 samples
+#in the KJENS Alzheimer's and Parinison's study data set:
+
+
+KJ1.rds.pth <- './input/William/combinedStatsForKJENS1.stats'
+rds.stats <- read.delim2(KJ1.rds.pth, sep = "\t", row.names = 1)
+rds.stats <- tFrame(rds.stats)
+
+KJ1.biotypes.pth <-'./input/William/KJENS1-Alzheimers_Parkinsons-2016-08-23_exceRpt_biotypeCounts.txt'
+bio.stats <- read.delim2(KJ1.biotypes.pth, sep = "\t", row.names = 1)
+bio.stats <- tFrame(bio.stats)
+
+if( all(rownames(bio.stats) == rownames(rds.stats)) ){
+    cmbd.stats<- cbind(rds.stats,bio.stats)
+    for( cl in 1:ncol(cmbd.stats) ){
+        cmbd.stats[,cl] <- as.numeric(as.character(cmbd.stats[,cl])) 
+    } 
+    
+}
+
+###GET THE METADATA FOR THESE SAMPLES####
+metadata.pth <- "./input/William/Atlas_Human_Sample_Metadata2.txt"
+Atlas.meta <- read.delim2(metadata.pth, sep ="\t", row.names = 1)
+KJ1.meta <- Atlas.meta[row.names(cmbd.stats),]
+
+if( all(rownames(KJ1.meta) == rownames(cmbd.stats)) ){
+    cmbd.stats.meta <- cbind(cmbd.stats, KJ1.meta)
+    cmbd.stats.meta <- cmbd.stats.meta[ naturalsort(rownames(cmbd.stats)), ]
+}
+
+cmbd.stats.meta <- cmbd.stats.meta[,-c(1:4,21:29,33:34)]
+
+colnames(cmbd.stats.meta)
+#cmbd.stats.nrm <- cmbd.stats/cmbd.stats$genome
+#cmbd.stats.nrm <- cmbd.stats.nrm[,-grep("^genome",colnames(cmbd.stats.nrm))]
+################################################################################
+##Look at overview of PCA results
+res.pca <- prcomp(cmbd.stats.meta[,1:(length(colnames(cmbd.stats.meta))-6)] ,scale. = T)
+eig <- (res.pca$sdev)^2
+component.variance <- eig/sum(eig)*100
+cumvar <- cumsum(component.variance)
+circ.var <- get_pca_var(res.pca = res.pca)
+########################
+##This plots the the feature vectors on the unit circle with their labels
+
+
+# Helper function : 
+# Correlation between variables and principal components
+var_cor_func <- function(var.loadings, comp.sdev){
+    var.loadings*comp.sdev
+}
+# Variable correlation/coordinates
+loadings <- res.pca$rotation
+sdev <- res.pca$sdev
+var.coord <- var.cor <- t(apply(loadings, 1, var_cor_func, sdev))
+head(var.coord[, 1:4])
+
+
+####################################################################################################
+#plot explained variance
+barplot(component.variance[1:12], names.arg=1:length(component.variance[1:12]), 
+        main = "KJ1 summary statistics:\nVariance of PCs 1-12",
+        sub = "(82% variance explained)",
+        xlab = "Principal Components",
+        ylab = "Percentage of variances",
+        col ="steelblue")
+
+#Plot feature contributions
+KJ1.circ.titl <- "Feature contributions to Principal Components KJ1"
+fviz_pca_var(res.pca,labelsize = 1,repel = T,axes = c(1,2),title = KJ1.circ.titl  )
+fviz_pca_var(res.pca,labelsize = 1,repel = T,axes = c(2,3),title = KJ1.circ.titl )
+fviz_pca_var(res.pca,labelsize = 1,repel = T,axes = c(3,4),title = KJ1.circ.titl )
+fviz_pca_var(res.pca,labelsize = 1,repel = T,axes = c(4,5),title = KJ1.circ.titl )
+###############################################
+#plot pca scatter plots
+tmp1 <- predict(res.pca)
+tmp1 <- as.data.frame(tmp1)
+
+KJ1.PCA.titl <- "Principal Component Scatter Plot for KJ1"
+BioFluid <- cmbd.stats.meta$Biofluid.Name
+Condition <- KJ1.meta$Condition
+tRNA <- cmbd.stats.meta$tRNA
+qplot(PC1, PC2, data=tmp1, colour= BioFluid, shape = Condition )
+qplot(PC2, PC3, data=tmp1, colour= BioFluid, shape = Condition )
+qplot(PC3, PC4, data=tmp1, colour= BioFluid, shape = Condition )
+
+qplot(PC1, PC2, data=tmp1, colour=tRNA , shape = BioFluid )
+qplot(PC2, PC3, data=tmp1, colour=tRNA, shape = BioFluid )
+qplot(PC3, PC4, data=tmp1, colour=tRNA, shape = BioFluid )
+
+
+
+color.var <- cmbd.stats.meta$
+color.lims <- quantile(color.var,probs = c(.1,.9))
+a <- ggplot(data = tmp1, 
+            mapping = aes(x=PC1, y=PC2, shape = KJ1.meta$Condition,
+                          colour=color.var) )
+a + geom_point(alpha = 0.4)# + scale_colour_gradient(limits= color.lims,low = 'red',high = 'blue') 
+
+
+qplot(PC3, PC4, data=tmp1, colour=cmbd.stats.meta$Anatomical.Location, shape = cmbd.stats.meta$Condition)
+qplot(PC3, PC4, data=tmp1, colour=cmbd.stats.meta$pseudogene, shape = cmbd.stats.meta$Condition)
+qplot(PC4, PC5, data=tmp1, colour=cmbd.stats.meta$processed_transcript, shape = KJ1.meta$Condition )
+qplot(PC4, PC5, data=tmp1, colour=cmbd.stats.meta$processed_pseudogene, shape = KJ1.meta$Condition )
+#PC4 looks like  coding gene/pseudogene; PC5 looks like processed gene/pseudogene
+
+
+qplot(PC1, PC2, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC2, PC3, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC3, PC4, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC4, PC5, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC5, PC6, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC6, PC7, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC7, PC8, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC8, PC9, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC9, PC10, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+qplot(PC10, PC11, data=tmp1, colour=cmbd.stats.meta$tRNA, shape = KJ1.meta$Condition )
+
+
+
+qplot(PC5, PC6, data=tmp1, colour=cmbd.stats.meta$lincRNA, shape = KJ1.meta$Condition )
+qplot(PC6, PC7, data=tmp1, colour=cmbd.stats.meta$lincRNA, shape = KJ1.meta$Condition )
+qplot(PC7, PC8, data=tmp1, colour=cmbd.stats.meta$lincRNA, shape = KJ1.meta$Condition )
+qplot(PC8, PC9, data=tmp1, colour=cmbd.stats.meta$lincRNA, shape = KJ1.meta$Condition )
+qplot(PC9, PC10, data=tmp1, colour=cmbd.stats.meta$lincRNA, shape = KJ1.meta$Condition )
+
+
+####################
+if(F){
+a <- ggplot(data = tmp1,
+            mapping = aes(x=PC4, y=PC5, shape = KJ1.meta$Condition, colour=cmbd.stats.meta$pseudogene) )
+a + geom_point() + scale_colour_gradient(limits=c(0,400),low = 'red') 
+
+ratio <- ((cmbd.stats.meta$protein_coding/mean(cmbd.stats.meta$protein_coding))/(cmbd.stats.meta$pseudogene/mean(cmbd.stats.meta$pseudogene)) )
+a <- ggplot(data = tmp1,
+            mapping = aes(x=PC4, y=PC5,
+                          shape = KJ1.meta$Condition,
+                          colour= ratio ))
+a + geom_point() + scale_colour_gradient(low = 'green', high = 'black') 
+
+max(cmbd.stats.meta$pseudogene)
+}
