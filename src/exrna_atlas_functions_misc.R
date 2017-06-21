@@ -28,7 +28,7 @@ set.seed(20161017)
 #Define custom functinos for Atlas analysis workflows
 #
 #####Processing graph diffusion results from Lilli's current outputs------######
-#Converts information scores from 'optimize.results' matrix 
+#Converts information scores from 'optimize.results' matrix
 # to matirx of p-values at or below some threshold
 info2p <- function(gph.info.Mtx, p.cutoff = .05,cut.style = '<=', reverse = F){
     if(!is.numeric(gph.info.Mtx)){return(NULL)}
@@ -51,7 +51,7 @@ my.get.mode.info <- function(my.vec){
     return(paste(a,' (',b,'x)',sep = ''))
 }
 
-#Splits modules as rownames to list of nodes in each module: 
+#Splits modules as rownames to list of nodes in each module:
 get.mod.membs <- function(gph.Mtx,delimiter = "/"){
     mod.membs <- sapply(rownames(gph.Mtx), strsplit, delimiter)
     return(mod.membs)
@@ -64,7 +64,7 @@ to.numeric.df <- function(df){
     }
     chk <- all((apply(df,2,is.numeric)))
     if(chk){return(df)}else{print('problem with data conversion')}
-}    
+}
 
 
 get.non.module.vars <- function(query.df,sig,non.sig,var.ptt = "hsa-mir"){
@@ -72,10 +72,10 @@ get.non.module.vars <- function(query.df,sig,non.sig,var.ptt = "hsa-mir"){
     vld <- grep(var.ptt,colnames(query.df),ignore.case = T)
     vld <- colnames(query.df[,vld])
     vld <- naturalsort(vld)
-    
+
     excl.sig    <- (length(sig)-length(intersect(sig,vld)))
     excl.nonsig <- (length(non.sig)-length(intersect(non.sig,vld)))
-    
+
     #print( paste(excl.sig, "significant nodes not in query" ))
     #print( paste(excl.nonsig, "non-significant nodes not in query" ))
 
@@ -111,7 +111,7 @@ per.node.int.v.ext.nodes <- function(allNodes,modMembs){
 }
 
 
-get.reduced.pairings <- function(in.ex.pairs.lst){                         
+get.reduced.pairings <- function(in.ex.pairs.lst){
         all.im.prs <- list()
         all.ex.prs <- list()
         for(m in in.ex.pairs.lst){
@@ -126,7 +126,7 @@ get.reduced.pairings <- function(in.ex.pairs.lst){
                 # though both nodes appear in at least one 'significant' module
                 all.ex.prs <- c( all.ex.prs, combn(m$extramod,2,simplify = F) )
             }
-            
+
         }
         #Get rid of any node pairs in the extramodule group that are
         # present in the intramodule pairings
@@ -136,22 +136,22 @@ get.reduced.pairings <- function(in.ex.pairs.lst){
         #Collapse the module pairs to a table that records a given
         # pairing only once, and sort the table
         im <- as.data.frame(t(sapply(all.im.prs,naturalsort)))
-        im <- im[!duplicated(im),]    
+        im <- im[!duplicated(im),]
         im <- im[naturalorder(im[,1]),]
-        
+
         ex <- as.data.frame(t(sapply(all.ex.prs,naturalsort)))
         ex <- ex[!duplicated(ex),]
         ex <- ex[naturalorder(ex[,1]),]
-        
+
         im.ex <- list(intramodule.prs = im, extramodule.prs = ex)
         return(im.ex)
-}    
+}
 
 get.bg.pairings <- function(non.mod.vars,bg.sample = 1000, bg.seed = 20161017){
     set.seed(bg.seed)
-    bg.prs <- combn(non.mod.vars,2,simplify = F) 
+    bg.prs <- combn(non.mod.vars,2,simplify = F)
     bg <- sample(bg.prs, bg.sample)
-    
+
     bg <- as.data.frame(t(sapply(bg,naturalsort)))
     bg <- bg[!duplicated(bg),]
     bg <- bg[naturalorder(bg[,1]),]
@@ -166,8 +166,8 @@ get.nodepair.cors <- function(query.df, node.pairings){
             m1 <- as.character(prs[i,1])
             m2 <- as.character(prs[i,2])
             if((m1 %in% colnames(query.df)) && (m2 %in% colnames(query.df)) ){
-                cors <- c(cors, cor(query.df[,m1], query.df[,m2])) 
-            }else{cors <- c(cors,NA)} 
+                cors <- c(cors, cor(query.df[,m1], query.df[,m2]))
+            }else{cors <- c(cors,NA)}
         }else{ cors <- c(cors,NA)}
     }
     return(cors)
@@ -192,12 +192,12 @@ matched.expts <- function(expt.names){
                     a <- grep(paste('[as]',p,'-',sep = ''),ex,fixed = F,value = T)
                     b <- grep(p+6,ex,fixed = T,value = T)
                     if(length(a) == 0 ){a <- NULL}
-                    if(length(b) == 0 ){b <- NULL} 
+                    if(length(b) == 0 ){b <- NULL}
                     t <- t+1
                     res <-  list(true = a, randomized = b)
                     lst[[paste(cat,cnd,p,sep = '')]] <- res
                 }
-            }    
+            }
         }
     }
     for(i in names(lst)){
@@ -240,14 +240,14 @@ get.mods.and.info <- function(sig.mods,mod.membs){
         for(s in 1:length(x)){
             nm <- gsub('hsa','',make.names(names(x)[s]))
             tm2[[ nm ]] <- list(members = x[[s]], information = y[s])
-            
+
         }
     }
     return(tm2)
 }
 
 ################################################################################
-#This function removes modules which are subsets of other modules. 
+#This function removes modules which are subsets of other modules.
 rmv.sub.modules <- function(mds.lst){
     mds <- module.members#mds.lst
     md.red <- vector("list",length(mds))
@@ -276,7 +276,7 @@ my.load.excerpt.rdata <- function(local_rdat_file){
         print("File not found.")
         return()
     }
-    
+
     loaded <- load(local_rdat_file)
 
     e <- environment()
@@ -285,7 +285,7 @@ my.load.excerpt.rdata <- function(local_rdat_file){
     names(d) <- sapply(loaded,gsub,replacement = "", pattern = "exprs.")
     d <- lapply(d,t)
     d <- lapply(d,as.data.frame)
-    
+
     return(d)
 }
 
@@ -295,16 +295,16 @@ my.load.excerpt.rdata <- function(local_rdat_file){
 #This function should produce a data frame
 # containing all of the BioGPS metadata for a given study in the ExRNA-Atlas
 my.get.study.bioGPS.metadata <- function(url, study.dirname){
-    
+
     my.url <- paste(url,study.dirname,'/', sep = '')
     dirs.data <- getURL(url = my.url, dirlistonly = T)
     dirs.data <- unlist(strsplit(dirs.data,'\r\n'))
-    
+
     BioGPS.dir <- grep('BioGPS', dirs.data, value = T)
     my.url <- paste(my.url, BioGPS.dir,'/', sep = '')
     dirs.data <- getURL(url = my.url, dirlistonly = T)
     dirs.data <- unlist(strsplit(dirs.data,'\r\n'))
-    
+
     metadata.file <- grep('metadata.txt', dirs.data, value = T)
     my.url <- paste(my.url,metadata.file, sep = '')
     meta.dat <- getURL(url = my.url)
@@ -321,19 +321,19 @@ my.get.study.bioGPS.metadata <- function(url, study.dirname){
 my.get.study.post.processed.results <- function(url, study.dirname,
                                                 RNA.type = 'miRNA', check.names = T,
                                                 per.million = T){
-    
+
     if(per.million){normalization <- "ReadsPerMillion.txt"}else{normalization <- 'ReadCounts.txt'}
-    
+
     my.url <- paste(url,study.dirname,'/', sep = '')
     dirs.data <- getURL(url = my.url, dirlistonly = T)
     dirs.data <- unlist(strsplit(dirs.data,'\r\n'))
-    
+
     results.dir <- grep('postProcessedResults_v4.6.3', dirs.data, value = T)
     my.url <- paste(my.url, results.dir,'/', sep = '')
     dirs.data <- getURL(url = my.url, dirlistonly = T)
     dirs.data <- unlist(strsplit(dirs.data,'\r\n'))
-    
-    
+
+
     ptt <- paste("exceRpt", RNA.type, normalization, sep = "_")
     data.file <- grep(ptt, dirs.data, value = T)
     my.url <- paste(my.url,data.file, sep = '')
@@ -349,7 +349,7 @@ my.get.study.post.processed.results <- function(url, study.dirname,
 ################################################################################
 my.combine.study.reads <- function(dirs.studies, RNA.type, base.url,
                                    per.million = T, check.names = T){
-    
+
     #For the given RNA type populate a list of read count data frames
     dfs.lst <- vector("list",length(dirs.studies))
     names(dfs.lst) <- dirs.studies
@@ -359,27 +359,27 @@ my.combine.study.reads <- function(dirs.studies, RNA.type, base.url,
         print(paste(cur.study,RNA.type,"reads added."))
         Sys.sleep(30)
     }
-    
-    
+
+
     all.observed.rna <- NULL
     all.samples <- NULL
     for(i in dfs.lst ){
-        #compile a list of the variables and samples 
+        #compile a list of the variables and samples
         all.observed.rna <- unique(c( all.observed.rna, rownames(i)))
         all.samples <- c(all.samples, colnames(i))
-        
+
     }
-    
+
     perMillion.counts <- matrix(data = 0,
                                 nrow = length(all.observed.rna),
                                 ncol = length(all.samples),
                                 dimnames = list(all.observed.rna,all.samples))
-    
+
     for(i in dfs.lst ){
         perMillion.counts[rownames(i),colnames(i)] <- as.matrix(i)
-        
+
     }
-    
+
     return(as.data.frame(perMillion.counts))
 
 }
@@ -390,7 +390,7 @@ my.map.BSIDtoSampleName <- function(url, study.dirname, existing.map = NULL){
     #Load the ExRNA-Atlas Result files into memory and extract the
     #BiosampleID sample name pairings
     #Return a dataframe of pairings
-    
+
     ############################################################################
     #SUB-FUNCTIONS
     ############################################################################
@@ -400,13 +400,13 @@ my.map.BSIDtoSampleName <- function(url, study.dirname, existing.map = NULL){
         sm <- str_extract(string = rf.string, pattern = smp.qry.string)
         sm <- gsub(pattern = paste(study.dirname,'/',sep = ''), replacement = '', x = sm)
         sm <- gsub(pattern = '/CORE_RESULTS/','',x = sm)
-        
+
         BS.qry.string <- paste('Biosample ID\tEXR','.*','-BS',sep = '')
         bs <- str_extract(string = rf.string, pattern = BS.qry.string)
         bs <- gsub(pattern = 'Biosample ID\t', replacement = '', x = bs)
-        
+
         return(c(bs,sm))
-    }    
+    }
     ############################################################################
     #Begin my.map.BSIDtoSampleName
     ############################################################################
@@ -414,19 +414,19 @@ my.map.BSIDtoSampleName <- function(url, study.dirname, existing.map = NULL){
     my.url <- paste(url,study.dirname,'/', sep = '')
     dirs.data <- getURL(url = my.url, dirlistonly = T)
     dirs.data <- unlist(strsplit(dirs.data,'\r\n'))
-    
+
     meta.dir <- grep('metadataFiles', dirs.data, value = T)
     my.url <- paste(my.url, meta.dir,'/', sep = '')
     dirs.data <- getURL(url = my.url, dirlistonly = T)
     dirs.data <- unlist(strsplit(dirs.data,'\r\n'))
-    
+
     #Now for each results file (-RF.metadata)
     metadata.files <- grep('-RF.metadata.tsv', dirs.data, value = T)
     mappings <- NULL
     mpp <- NULL
     for(mf in metadata.files){
         print(mf)
-        
+
         my.url1 <- paste(my.url, mf, sep = '')
         meta.dat <- NULL
         attempt <- 1
@@ -436,7 +436,7 @@ my.map.BSIDtoSampleName <- function(url, study.dirname, existing.map = NULL){
             try(meta.dat <- getURL(url = my.url1))
             Sys.sleep(11)
         }
-        
+
         Sys.sleep(1)
         if(is.null(meta.dat) && attempt >= 10){
             mpp <- c("Failed Download", "Failed Dowload")
@@ -446,10 +446,10 @@ my.map.BSIDtoSampleName <- function(url, study.dirname, existing.map = NULL){
         mpp <- c(mf,mpp,study.dirname)
         mappings <- c(mappings,mpp)
         my.url1 <- NULL
-        
-        
+
+
     }
-    
+
     mappings <- as.data.frame(matrix(mappings,ncol = 4,byrow = T))
     colnames(mappings) <-c("RF File","BS ID", "Sample Name", "Study")
     return(mappings)
@@ -461,3 +461,39 @@ delete.isolated <- function(graph, mode = 'all') {
     delete.vertices(graph, isolates)
 }
 
+#Identify exRNA detected in a given propotion of samples at a given rpm value
+# so that we can reduce the size of the data
+filterByPctDtect <- function(x, min_detect_proportion, min_rpm){
+    detect_prop <- length(x[x >= min_rpm]) / length(x)
+
+    if(detect_prop >= min_detect_proportion){return(TRUE)
+    }else{ return(FALSE)}
+
+}
+#We want our chosen miRNA to show variability across conditions so we may be able to
+# remove miRNA that do not vary enough
+filterByVariance <- function(x, min_variance){
+    v <- var(x)
+    if(v < min_variance){return(TRUE)}else{return(FALSE)}
+
+}
+
+filterBySD <- function(x, min_sd){
+    s <- sd(x)
+    if(s < min_sd){return(TRUE)}else{return(FALSE)}
+
+}
+
+filterByIQR <- function(x, min_iqr){
+    i <- IQR(x)
+    if(i < min_iqr){return(TRUE)}else{return(FALSE)}
+
+}
+
+
+removeRareRNA <- function(df, min_detect_proportion = .05, min_rpm = 1){
+    r <- apply(df, 2, filterByPctDtect, min_detect_proportion, min_rpm)
+
+    return(df[,r])
+
+}
