@@ -1,8 +1,10 @@
 ###################################################################################################
 ##title:                 exrna_atlas_merge_data_and_metadata.R
-##started_date:          unknown
+##associated_project:    exrna_atlas
+##associated_analysis:   get_atlas_data_in_R
+##started_date:          April 2017
 ##started_by:            Rocco Lucero
-##last_updated_date:     June 12, 2017
+##last_updated_date:     June 21, 2017
 ##last_updated_by:       Rocco Lucero
 ###################################################################################################
 ##description:   Pull together the exrna_atlas readcount data and metatdata into
@@ -12,12 +14,13 @@
 ##
 ##outputs:               <What are the outputs>
 ##
-##dependencies:          <Name any dependencies not publicly available>
+##dependencies:          <exrna_atlas_get_data_functions.R; exrna_atlas_get_metadata_functions.R
+##                        get_atlas_data_in_R_generic_functions.R>
 ###################################################################################################
 
 
-source(file = "./exrna_atlas_get_read_counts_functions.R")
-source(file = "./exrna_atlas_get_meta_data_functions.R")
+source(file = "./src/exrna_atlas_get_data_functions.R")
+source(file = "./src/exrna_atlas_get_metadata_functions.R")
 
 
 studies_url <- paste('ftp://ftp.genboree.org/exRNA-atlas/grp/',
@@ -34,6 +37,12 @@ meta_types <- c('BS', 'DO', 'ST', 'SU')
 
 get_rc <- F
 if(get_rc){
+
+    obj <- do.call(what = my.get.atlas.readcounts,
+                   args = list(rna_types = rna_types1,
+                               studies_url = studies_url,
+                               dirs_studies = dirs_studies[1]))
+
 exrna_atlas_readcounts1 <- my.get.atlas.readcounts(rna_types = rna_types1,
                                                   studies_url = studies_url,
                                                   dirs_studies = dirs_studies)
@@ -46,14 +55,14 @@ exrna_atlas_readcounts2 <- my.get.atlas.readcounts(rna_types = rna_types2,
                                                   dirs_studies = dirs_studies)
 
 saveRDS(object = exrna_atlas_readcounts2,
-        file = "./exrna_atlas_gencode_readcounts.RDS")
+        file = "./output/exrna_atlas_gencode_readcounts.RDS")
 
 exrna_atlas_readcounts2_sep <- sep.df.by.colname.pttn(exrna_atlas_readcounts2$gencode)
 
 rm(exrna_atlas_readcounts2)
 
 saveRDS(object = exrna_atlas_readcounts2_sep,
-        file = "./exrna_atlas_split_from_gencode_readcounts.RDS")
+        file = "./output/exrna_atlas_split_from_gencode_readcounts.RDS")
 
 rm(exrna_atlas_readcounts2_sep)
 }
@@ -61,18 +70,11 @@ rm(exrna_atlas_readcounts2_sep)
 get_meta <- T
 if(get_meta){
 
-mm <- my.get.study.metadata(studies_url = studies_url,
-                      study_dirname = dirs_studies[1])
+    exrna_atlas_meta <- get.atlas.metadata(studies_url = studies_url,
+                                           studies_dirs = dirs_studies,
+                                           meta_types = meta_types)
 
 
-#exrna_atlas_metadata <- my.merge.metadata(studies_url = studies_url,
-#                                          studies_dirs = dirs_studies[1:2])
-
-saveRDS(object = exrna_atlas_metadata, file = "./exrna_atlas_metadata.RDS")
-rm(exrna_atlas_metadata)
-
-exrna_atlas_bsid_to_sample_names <- lapply(X = dirs_studies,
-                                           FUN = function(s){})
 }
 
-
+s <- get.atlas.metadata(studies_url = studies_url, studies_dirs = dirs_studies[1:2], meta_types = meta_types)
