@@ -22,6 +22,7 @@ source(file = "../get_atlas_data_in_R/src/exrna_atlas_get_metadata_functions.R")
 
 
 #####SET PRELIMINARY PARAMETERS#####
+tmp_fldr <- '../get_atlas_data_in_R/interim/exrna_atlas_rc_tmp/'
 save_path <- '../get_atlas_data_in_R/interim/'
 
 studies_url <- paste('ftp://ftp.genboree.org/exRNA-atlas/grp/',
@@ -30,13 +31,12 @@ studies_url <- paste('ftp://ftp.genboree.org/exRNA-atlas/grp/',
 
 dirs_studies <- my.get.print.studies(studies_url = studies_url, print_only = F)
 
-meta_types <- c('BS', 'DO', 'ST', 'SU')
-
-gencode_biotypes <- get.atlas.biotype.names(studies_url, dirs_studies)
-
+################################################################################
 ################################################################################
 get_meta <- F
 if(get_meta){
+
+    meta_types <- c('BS', 'DO', 'ST', 'SU')
 
     get_meta_args <- list(studies_url = studies_url,
                           studies_dirs = dirs_studies,
@@ -48,38 +48,73 @@ if(get_meta){
                     save_as_name = 'exrna_atlas_metadata_and_map_to_samples.RDS')
 }
 
-get_rc <- F
+################################################################################
+################################################################################
+get_rc <- T
+get_non_gencode <- T
+get_gencode <- T
+split_gencode <- T
+get_circ <- F
 if(get_rc){
 
-    #Download non-gencode readcount data and store in a single R object
-    get_data_args <- list(rna_types = NULL, studies_url = studies_url, dirs_studies = dirs_studies)
+    if(get_non_gencode){
 
-    get_data_args$rna_types <- c('miRNA', 'tRNA', 'piRNA')
+        rna_types <- c('miRNA', 'piRNA', 'tRNA')
+        get_data_args <- list(studies_url = studies_url, studies_dirs = dirs_studies,
+                              rna_types = rna_types,
+                              tmp_fldr = tmp_fldr )
 
-    rds_save_output(fun = my.get.atlas.readcounts, args = get_data_args, save_path = save_path,
-                    save_as_name = 'exrna_atlas_readcounts_non_gencode.RDS')
+        rds_save_output(fun = aggregate.exrna.atlas.readcounts,
+                        args = get_data_args, save_path = save_path,
+                        save_as_name = 'exrna_atlas_readcounts_non_gencode.RDS')
+
+        rm(rna_types, get_data_args)
+    }
 
 
+    if(get_gencode){
 
-    #Download gencode mapped readcount data and store in a single R object
-    get_data_args$rna_types <- c('gencode')
+        rna_types <- c('gencode')
+        get_data_args <- list(studies_url = studies_url, studies_dirs = dirs_studies,
+                              rna_types = rna_types,
+                              tmp_fldr = tmp_fldr )
 
-    rds_save_output(fun = my.get.atlas.readcounts, args = get_data_args, save_path = save_path,
-                    save_as_name = 'exrna_atlas_readcounts_gencode.RDS')
+        rds_save_output(fun = aggregate.exrna.atlas.readcounts,
+                        args = get_data_args, save_path = save_path,
+                        save_as_name = 'exrna_atlas_readcounts_gencode_mixed.RDS')
 
-    gencode_mixed <- readRDS('./interim/exrna_atlas_readcounts_gencode.RDS')
+        rm(rna_types, get_data_args)
+    }
 
-    gencode_mixed <- gencode_mixed$gencode
+    if(split_gencode){
 
-    split_gencode_args <-  list(df = gencode_mixed, patterns = gencode_biotypes)
+        gencode_mixed <- readRDS('./interim/exrna_atlas_readcounts_gencode_mixed.RDS')
+        gencode_mixed <- gencode_mixed$gencode
 
-    rds_save_output(fun = sep.df.by.colname.pttn, args = split_gencode_args,
-                    save_path = save_path,
-                    save_as_name = 'exrna_atlas_readcounts_gencode_split.RDS')
+        gencode_biotypes <- get.atlas.biotype.names(studies_url, dirs_studies)
 
-    gencode_split <- readRDS('./interim/exrna_atlas_readcounts_gencode_split.RDS')
+        split_gencode_args <-  list(df = gencode_mixed, patterns = gencode_biotypes)
 
-    rm(gencode_mixed, split_gencode_args, get_data_args)
+        rds_save_output(fun = sep.df.by.colname.pttn, args = split_gencode_args,
+                        save_path = save_path,
+                        save_as_name = 'exrna_atlas_readcounts_gencode_split.RDS')
+
+        rm(gencode_mixed, split_gencode_args, gencode_biotypes)
+    }
+
+    if(get_circ){
+
+        rna_types <- c('circRNA')
+        get_data_args <- list(studies_url = studies_url, studies_dirs = dirs_studies,
+                              rna_types = rna_types,
+                              tmp_fldr = tmp_fldr )
+
+        rds_save_output(fun = aggregate.exrna.atlas.readcounts,
+                        args = get_data_args, save_path = save_path,
+                        save_as_name = 'exrna_atlas_readcounts_circRNA_mixed.RDS')
+
+        rm(rna_types, get_data_args)
+    }
 
 }
 

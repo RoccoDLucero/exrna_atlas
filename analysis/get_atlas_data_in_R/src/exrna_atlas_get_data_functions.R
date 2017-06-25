@@ -113,8 +113,10 @@ my.get.study.post.processed.results <- function(studies_url, study_dirname,
 
 }
 
-
-
+################################################################################
+################################################################################
+##THESE FUNCTIONS GET READCOUND DATA BUT ONLY USE MEMORY TO PROCESS FILES
+################################################################################
 ################################################################################
 my.combine.study.counts.by.rna <- function( dirs_studies, rna_type, studies_url,
                                             per_million = T, check_names = T){
@@ -178,7 +180,7 @@ my.combine.study.counts.by.rna <- function( dirs_studies, rna_type, studies_url,
 ################################################################################
 #THIS IS THE MAIN FUNCTION USED TO GET READCOUND DATA
 ################################################################################
-my.get.atlas.readcounts <- function(rna_types, dirs_studies, studies_url,
+my.get.atlas.readcounts <- function(rna_types, studies_dirs, studies_url,
                                     per_million = T, check_names = T){
 
     cat("\n", rep("=", 60), "\n", sep = "")
@@ -206,5 +208,133 @@ my.get.atlas.readcounts <- function(rna_types, dirs_studies, studies_url,
     return(rc)
 
 }
+
+################################################################################
+################################################################################
+################################################################################
+##THE FUNCTIONS BELOW ACCOMPLISH THE SAME AS THOSE ABOVE, BUT THEY USE THE DISK
+##AS A TEMPORARY STORAGE OF UNPROCESSED FILES
+################################################################################
+write.study.readcounts.obj.by.rna <-function(save_fldr, study_dirname,
+                                             rna_type, ...){
+
+
+    study_ppr <- my.get.study.post.processed.results(studies_url, study_dirname,
+                                                     rna_type,
+                                                     postprocess_version = "v4.6.3",
+                                                     check_names = F,
+                                                     per_million = T)
+
+    save_name <- paste(study_dirname, "_", rna_type, '_readcounts.RDS')
+    save_name <- gsub(" ", "", save_name)
+
+    save_path <- paste(save_fldr, save_name, sep = '')
+
+    saveRDS(study_ppr, save_path)
+
+    return(NULL)
+}
+
+
+combine.on.disk.study.readcounts.by.rna <- function(rna_type,
+                                                    save_fldr, ...){
+    path <- save_fldr
+
+    filter.empty.df <- function(df){ is.null(df)}
+
+    rc_tables <- list.files(path = path)
+
+    tmp_list <- vector("list", length(rc_tables))
+
+    names(tmp_list) <- rc_tables
+
+    while(length(tmp_list) > 1){
+
+        if(names(tmp_list)[1] == rc_tables[1]){
+
+            df_1 <- readRDS(paste(path,names(tmp_list)[1],sep = ''))
+
+        }else{
+
+            df_1 <- tmp_list[[1]]
+
+        }
+
+        df_2 <- readRDS(paste(path,names(tmp_list)[2],sep = ''))
+
+        if(filter.empty.df(df_1)){ tmp_list <- tmp_list[-1]; next }
+
+        if(filter.empty.df(df_2)){ tmp_list <- tmp_list[-2]; next }
+
+        new_df <- my.combine.atlas.rpm.tables(df_1, df_2)
+
+        tmp_list[[1]] <- new_df
+
+        names(tmp_list)[1] <- "new_df"
+
+        tmp_list <- tmp_list[-2]
+
+    }
+
+    df_cmbnd <- tmp_list[[1]]
+
+    df_cmbnd <- t(df_cmbnd)
+
+    return(df_cmbnd)
+
+}
+
+
+get.and.combine.readcounts.by.rna <- function(studies_dirs,
+                                              rna_type,
+                                              save_fldr,
+                                              unlink = T, ...){
+    dir.create(save_fldr, showWarnings = F)
+
+    sapply(X = studies_dirs,
+           FUN = function(st){
+               write.study.readcounts.obj.by.rna(study_dirname = st,
+                                                 rna_type = rna_type,
+                                                 save_fldr = save_fldr)
+           })
+
+    rt_combnd <- combine.on.disk.study.readcounts.by.rna(rna_type, save_fldr, unlink)
+
+    unlink_fldr <- gsub(pattern = "/$", replacement = '', x = save_fldr)
+    if(unlink){unlink(x = unlink_fldr, recursive = T)
+        return(rt_combnd)
+    }else{return(NULL)}
+
+
+}
+
+################################################################################
+#THIS IS THE ALTERNATIVE MAIN FUNCTION USED TO GET READCOUND DATA
+################################################################################
+aggregate.exrna.atlas.readcounts <- function( studies_url,
+                                              studies_dirs,
+                                              rna_types,
+                                              tmp_fldr, ...){
+    save_fldr <- tmp_fldr
+
+    dir.create(save_fldr, showWarnings = F)
+
+    rc_lst <- lapply(X = rna_types,
+                     FUN = function(rt){
+                         get.and.combine.readcounts.by.rna(rna_type = rt,
+                                                           studies_dirs,
+                                                           save_fldr)})
+
+    names(rc_lst) <- rna_types
+
+    rc_lst <- lapply(X = rc_lst, as.data.frame )
+
+    print(sapply(X = rc_lst, FUN = dim))
+
+    return(rc_lst)
+
+}
+
+
 
 
