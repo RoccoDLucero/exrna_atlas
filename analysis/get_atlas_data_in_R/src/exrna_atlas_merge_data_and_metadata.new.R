@@ -41,12 +41,16 @@ if(get_meta){
     get_meta_args <- list(studies_url = studies_url,
                           studies_dirs = dirs_studies,
                           meta_types = meta_types,
-                          get_map = F )
+                          get_map = T )
 
     rds_save_output(fun = get.atlas.metadata, args = get_meta_args,
                     save_path = save_path,
                     save_as_name = 'exrna_atlas_metadata_and_map_to_samples.RDS')
+
 }
+
+get_map_only <- T
+ <- get.combined.bsid.to.smp.name.maps(studies_url, studies_dirs)
 
 ################################################################################
 ################################################################################
