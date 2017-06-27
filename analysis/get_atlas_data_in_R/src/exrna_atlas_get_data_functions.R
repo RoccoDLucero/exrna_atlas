@@ -301,8 +301,11 @@ get.and.combine.readcounts.by.rna <- function(studies_dirs,
     rt_combnd <- combine.on.disk.study.readcounts.by.rna(rna_type, save_fldr, unlink)
 
     unlink_fldr <- gsub(pattern = "/$", replacement = '', x = save_fldr)
+
     if(unlink){unlink(x = unlink_fldr, recursive = T)
+
         return(rt_combnd)
+
     }else{return(NULL)}
 
 

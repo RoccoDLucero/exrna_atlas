@@ -49,15 +49,60 @@ if(get_meta){
 
 }
 
-get_map_only <- T
- <- get.combined.bsid.to.smp.name.maps(studies_url, studies_dirs)
+process_meta <- F
+if(process_meta){
+    meta_path <- '../get_atlas_data_in_R/interim/exrna_atlas_metadata_and_map_to_samples.RDS'
+
+    meta <- readRDS(file = meta_path)
+
+    meta_map <- meta$bsid_sample_map
+
+    colnames(meta_map)[1] <- "Biosample"
+
+    cmbnd_meta <- lapply(X = meta_types,
+                     FUN = function(dt){
+                         d <- get.doctype.tables(atlas_metadata = bsid,
+                                                 studies = dirs_studies,
+                                                 doc_type = dt)
+
+                         rownames(d) <- make.names(names = rownames(d), unique = T)
+
+                         return(d)
+
+                     }
+    )
+
+    cmbnd_meta_t <- lapply(X = cmbnd_meta, t)
+
+    names(cmbnd_meta_t) <- meta_types
+
+    colnames(cmbnd_meta_t$BS)[7] <- "Donor"
+
+    atlas_core_metadata <- merge.data.frame(x = cmbnd_meta_t$BS,
+                                            y = cmbnd_meta_t$DO,
+                                            by = 'Donor')
+
+    atlas_core_metadata <- merge.data.frame(x = atlas_core_metadata,
+                                            y = meta_map,
+                                            by = 'Biosample')
+
+    ##Need to get experiment and run metadata
+
+    atlas_core_metadata <-  atlas_core_metadata[ ,c(1, 23, 4, 24, 2, 19, 15, 21, 22, 11, 13, 14, 17, 18, 20, 25) ]
+
+    colnames(atlas_core_metadata) <- gsub(pattern = '^X[.]+',
+                                          replacement = '',
+                                          colnames(atlas_core_metadata))
+}
+
+
 
 ################################################################################
 ################################################################################
-get_rc <- T
-get_non_gencode <- T
-get_gencode <- T
-split_gencode <- T
+get_rc <- F
+get_non_gencode <- F
+get_gencode <- F
+split_gencode <- F
 get_circ <- F
 if(get_rc){
 

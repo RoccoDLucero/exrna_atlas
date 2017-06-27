@@ -67,8 +67,8 @@ get.study.biotypes <- function(studies_url, study_dirname){
     return(reads_dat[,1])
 }
 
-get.atlas.biotype.names <- function(studies_url, dirs_studies){
-    bt <-   sapply(X = dirs_studies,
+get.atlas.biotype.names <- function(studies_url, studies_dirs){
+    bt <-   sapply(X = studies_dirs,
             FUN = get.study.biotypes, studies_url = studies_url)
 
     bt <- unique(unlist(bt))
@@ -77,7 +77,7 @@ get.atlas.biotype.names <- function(studies_url, dirs_studies){
 }
 ################################################################################
 
-my.get.study.bioGPS.metadata <- function(studies.url, study.dirname){
+my.get.study.biogps.metadata <- function(studies.url, study.dirname){
     ############################################################################
     #Input: (2 character)   URL to all public Atlas studies;
     #                       name of specific study
@@ -96,20 +96,25 @@ my.get.study.bioGPS.metadata <- function(studies.url, study.dirname){
 
     metadata.file <- grep('metadata.txt', dirs.data, value = T)
     my.url <- paste(my.url,metadata.file, sep = '')
-    #meta.dat <- getURL(url = my.url)
-    #meta.con <- textConnection(meta.dat,"r")
-    #meta.dat <- read.table(meta.con, sep = '\t', header = T, fill = F,
-    #                       stringsAsFactors = F,quote = "")
+
     meta.dat <- retry.connection(target_url = my.url, text_connect = T)
 
     meta.dat[,1] <- rep(study.dirname,nrow(meta.dat))
     colnames(meta.dat)[1] <- 'Study'
 
-    #close.connection(meta.con)
-
     gc()
     Sys.sleep(1)
     return(meta.dat)
+}
+
+make.studies.biogps.df <- function(studies_url, studies_dirs){
+    gps_lst <- lapply(X = studies_dirs,
+                      FUN =  my.get.study.biogps.metadata,
+                      studies.url = studies_url)
+
+    df <- Reduce(f = rbind, x = gps_lst)
+
+    return(df)
 }
 ################################################################################
 
@@ -207,7 +212,8 @@ get.combined.bsid.to.smp.name.maps <- function(studies_url, studies_dirs){
 
     get.maps <- my.map.BSIDtoSampleName
 
-    maps <- lapply(X = studies_dirs, FUN = function(st){get.maps(studies_url,st)})
+    maps <- lapply(X = studies_dirs,
+                   FUN = function(st){print(st); get.maps(studies_url,st)})
     names(maps) <- studies_dirs
 
     maps <- Reduce(f = cbind, maps)

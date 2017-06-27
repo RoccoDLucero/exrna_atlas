@@ -151,7 +151,7 @@ my.combine.atlas.rpm.tables <- function(df1, df2){
     df2_expanded <- df2_expanded[rn_combined_1,]
 
     df_merged <- cbind(df1_expanded, df2_expanded)
-    #df_merged <- cbind(rownames(df_merged), df_merged)
+
     return( df_merged )
 
 }
