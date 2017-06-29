@@ -33,10 +33,12 @@ dirs_studies <- my.get.print.studies(studies_url = studies_url, print_only = F)
 
 ################################################################################
 ################################################################################
+meta_types <- c('BS', 'DO', 'EX', 'RU', 'ST', 'SU')
+
 get_meta <- F
 if(get_meta){
 
-    meta_types <- c('BS', 'DO', 'ST', 'SU')
+
 
     get_meta_args <- list(studies_url = studies_url,
                           studies_dirs = dirs_studies,
@@ -45,7 +47,7 @@ if(get_meta){
 
     rds_save_output(fun = get.atlas.metadata, args = get_meta_args,
                     save_path = save_path,
-                    save_as_name = 'exrna_atlas_metadata_and_map_to_samples.RDS')
+                    save_as_name = 'exrna_atlas_metadata_no_map_to_samples.RDS')
 
 }
 
@@ -57,47 +59,94 @@ if(process_meta){
 
     meta_map <- meta$bsid_sample_map
 
-    colnames(meta_map)[1] <- "Biosample"
+    meta_map <- reformat.names(meta_map,2)
 
     cmbnd_meta <- lapply(X = meta_types,
                      FUN = function(dt){
-                         d <- get.doctype.tables(atlas_metadata = bsid,
-                                                 studies = dirs_studies,
-                                                 doc_type = dt)
 
-                         rownames(d) <- make.names(names = rownames(d), unique = T)
+
+                         d <- get.doctype.tables(atlas_metadata = meta,
+                                                 studies = dirs_studies,
+                                                 doc_type = dt, universal_fields = T)
+                         dim <- 1
+
+                         d <- drop.field(d, dim, 'DocURL')
+                         d <- drop.field(d, dim, '-+ Type')
+                         d <- drop.field(d, dim, 'Status')
+                         d <- drop.field(d, dim, 'MD5.*')
+                         d <- drop.field(d, dim, 'File.Name')
+
+                         d <- reformat.names(d, dim)
+
+
 
                          return(d)
 
                      }
     )
 
-    cmbnd_meta_t <- lapply(X = cmbnd_meta, t)
+    names(cmbnd_meta) <- meta_types
 
-    names(cmbnd_meta_t) <- meta_types
+    cmbnd_meta <- lapply(X = cmbnd_meta, t)
 
-    colnames(cmbnd_meta_t$BS)[7] <- "Donor"
+    sapply(X = cmbnd_meta, colnames)
 
-    atlas_core_metadata <- merge.data.frame(x = cmbnd_meta_t$BS,
-                                            y = cmbnd_meta_t$DO,
-                                            by = 'Donor')
+    colnames(cmbnd_meta$BS) <- change.colnames(cmbnd_meta$BS,
+                                               "Donor.ID", "Donor")
+
+    colnames(cmbnd_meta$BS) <- change.colnames(cmbnd_meta$BS,
+                                               "Related.Experiment$", "Experiment")
+
+    colnames(cmbnd_meta$RU) <- change.colnames(cmbnd_meta$RU,
+                                               "Related.Study", "Study")
+
+    colnames(cmbnd_meta$RU) <- change.colnames(cmbnd_meta$RU,
+                                               "Biosample.ID", "Biosample")
+
+    colnames(cmbnd_meta$ST) <- change.colnames(cmbnd_meta$ST,
+                                               "Related.Submission$", "Submission")
+
+    sapply(X = cmbnd_meta, colnames)
+
+    atlas_core_metadata <- merge.data.frame(x = cmbnd_meta$BS,
+                                            y = cmbnd_meta$DO,
+                                            by = 'Donor',
+                                            all.x = T)
 
     atlas_core_metadata <- merge.data.frame(x = atlas_core_metadata,
-                                            y = meta_map,
-                                            by = 'Biosample')
+                                            y = cmbnd_meta$EX,
+                                            by = 'Experiment',
+                                            all.x = T)
 
-    ##Need to get experiment and run metadata
+    atlas_core_metadata <- merge.data.frame(x = atlas_core_metadata,
+                                            y = cmbnd_meta$RU,
+                                            by = "Biosample",
+                                            all.x = T)
 
-    atlas_core_metadata <-  atlas_core_metadata[ ,c(1, 23, 4, 24, 2, 19, 15, 21, 22, 11, 13, 14, 17, 18, 20, 25) ]
+    atlas_core_metadata <- merge.data.frame(x = atlas_core_metadata,
+                                            y = cmbnd_meta$ST,
+                                            by = 'Study',
+                                            all.x = T)
+
+    atlas_core_metadata <- merge.data.frame(x = atlas_core_metadata,
+                                            y = cmbnd_meta$SU,
+                                            by = 'Submission',
+                                            all.x = T)
 
     colnames(atlas_core_metadata) <- gsub(pattern = '^X[.]+',
                                           replacement = '',
                                           colnames(atlas_core_metadata))
+
+    #For study we need to combine author names to one field
+
+    atlas_core_metadata <-  atlas_core_metadata[ ,c(1, 23, 4, 24, 2, 19, 15, 21, 22, 11, 13, 14, 17, 18, 25) ]
+
 }
 
 
 
 ################################################################################
+
 ################################################################################
 get_rc <- F
 get_non_gencode <- F

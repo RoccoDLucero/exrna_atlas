@@ -294,7 +294,7 @@ my.get.study.metadata <- function(studies_url, study_dirname, meta_types = NULL)
 
         #Process a single file
         extract.meta <- function(meta_url, metadata_file){
-            text_only_meta_types <- c("EX.meta","RF.meta")
+            text_only_meta_types <- c("RF.meta")
 
             if(file_type_unique_string %in% text_only_meta_types){
 

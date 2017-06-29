@@ -2,24 +2,60 @@
 
 
 
-bsid_mp <- get.combined.bsid.to.smp.name.maps(studies_url,studies_dirs = dirs_studies)
+ex_ru_meta <- readRDS('../get_atlas_data_in_R/interim/exrna_atlas_metadata_EX_RU.RDS')
 
-mt[["bsid_sample_map"]] <- bsid_mp
+ex_ru_meta
 
-saveRDS(object = mt, file = '../get_atlas_data_in_R/interim/exrna_atlas_metadata_and_map_to_samples.2.RDS')
 
-head(bsid_mp)
+
 
 ####################################################################################################
 
+process.ru.tables <- function(run_table){
 
-meta <- readRDS(file = '../get_atlas_data_in_R/interim/exrna_atlas_metadata_and_map_to_samples.RDS')
-cmbnd_meta <- lapply(X = meta_types,
-                   FUN = function(dt){
-                       d <- get.doctype.tables(atlas_metadata = bsid ,studies = dirs_studies, doc_type = dt)
-                   }
-              )
-names(cmbnd_meta) <- meta_types
+        rt_vals <-  run_table[,1]
+
+        bs_cols <-  list(  "--*- Biosample ID",
+                            "--*-- File URL",
+                            "--*-- File Name",
+                            "--*-- MD5 Checksum",
+                            "--*-- Type",
+                            "--*-- DocURL")
+
+        nsamp_row   <- grep("Raw Data Files", rt_vals, fixed = T)
+
+        nsamp       <- as.integer(run_table[nsamp_row, 2])
+
+        bs_rows     <- unlist(sapply(X = bs_cols, grep, x = rt_vals, fixed = T))
+
+
+        run_dat <- run_table[-c(bs_rows), ]
+
+        rownames(run_dat) <- run_dat[,1]
+
+        run_dat <- as.data.frame(t(run_dat), stringsAsFactors = F)[2,]
+
+
+        bs_tab <- run_table[bs_rows,][1:nsamp,]
+
+        bs_tab <- cbind(bs_tab, run_dat[1,1])[,2:3]
+
+        colnames(bs_tab) <- c("Biosample", "Run")
+
+
+        processed_rt <- merge(x = bs_tab, y = run_dat, by = 'Run', all.x = T)
+
+        return(processed_rt)
+}
+
+s <- process.ru.tables(meta$`AKRIC1-GBM_exosome-2016-10-17`$RU)
+t <- (meta$`AKRIC1-GBM_exosome-2016-10-17`$RU)
 
 
 
+d <- get.ru.table(atlas_metadata = meta,
+                        studies = dirs_studies,
+                        doc_type = 'RU')
+
+
+sapply(d, function(z){head(z)[,-(grep('Experimental Design', colnames(z)))]})
