@@ -17,8 +17,7 @@
 ##dependencies:          <exrna_atlas_get_data_functions.R; exrna_atlas_get_metadata_functions.R
 ##                        get_atlas_data_in_R_generic_functions.R>
 ###################################################################################################
-source(file = "../get_atlas_data_in_R/src/exrna_atlas_get_data_functions.R")
-source(file = "../get_atlas_data_in_R/src/exrna_atlas_get_metadata_functions.R")
+source(file = "../get_atlas_data_in_R/src/get_atlas_data_in_r_src_functions.R")
 
 
 #####SET PRELIMINARY PARAMETERS#####
@@ -55,7 +54,7 @@ process_meta <- F
 if(process_meta){
     meta_path <- '../get_atlas_data_in_R/interim/exrna_atlas_metadata_and_map_to_samples.RDS'
 
-    meta <- readRDS(file = meta_path)
+    #meta <- readRDS(file = meta_path)
 
     meta_map <- meta$bsid_sample_map
 
@@ -80,16 +79,18 @@ if(process_meta){
 
 
 
-                         return(d)
+                         return(t(d))
 
                      }
     )
 
     names(cmbnd_meta) <- meta_types
 
-    cmbnd_meta <- lapply(X = cmbnd_meta, t)
 
-    sapply(X = cmbnd_meta, colnames)
+    ds <- as.data.frame(dirs_studies)
+    colnames(ds) <- "Study.Name.FTP.Dir"
+    cmbnd_meta$ST <- cbind(cmbnd_meta$ST, ds)
+
 
     colnames(cmbnd_meta$BS) <- change.colnames(cmbnd_meta$BS,
                                                "Donor.ID", "Donor")
@@ -105,6 +106,9 @@ if(process_meta){
 
     colnames(cmbnd_meta$ST) <- change.colnames(cmbnd_meta$ST,
                                                "Related.Submission$", "Submission")
+
+    colnames(meta_map) <- change.colnames(meta_map,
+                                          "BS.ID", "Biosample")
 
     sapply(X = cmbnd_meta, colnames)
 
@@ -133,14 +137,21 @@ if(process_meta){
                                             by = 'Submission',
                                             all.x = T)
 
+    atlas_core_metadata <- merge.data.frame(x = atlas_core_metadata,
+                                            y = meta_map[,c(1,2,4)],
+                                            by = 'Biosample',
+                                            all.x = T)
+
     colnames(atlas_core_metadata) <- gsub(pattern = '^X[.]+',
                                           replacement = '',
                                           colnames(atlas_core_metadata))
 
-    #For study we need to combine author names to one field
 
-    atlas_core_metadata <-  atlas_core_metadata[ ,c(1, 23, 4, 24, 2, 19, 15, 21, 22, 11, 13, 14, 17, 18, 25) ]
+    #atlas_core_metadata <-  atlas_core_metadata[ ,c(1, 23, 4, 24, 2, 19, 15, 21, 22, 11, 13, 14, 17, 18, 25) ]
 
+
+    saveRDS(atlas_core_metadata,
+            "../get_atlas_data_in_R/interim/comprehensive_atlas_metadata_draft_1.RDS")
 }
 
 
@@ -215,7 +226,5 @@ if(get_rc){
     }
 
 }
-
-
 
 

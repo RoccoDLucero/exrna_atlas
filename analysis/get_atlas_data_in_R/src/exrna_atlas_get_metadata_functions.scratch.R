@@ -338,6 +338,19 @@ my.get.study.metadata <- function(studies_url, study_dirname, meta_types = NULL)
 
         return(m_dat_mtx)
     }
+
+    generalize.meta.string <- function(meta.string){
+        expanded.names <- list(BS = 'BS|biosample.+',
+                               DO = 'DO|donor.+',
+                               EX = 'EX|experiment.+',
+                               RU = 'RU|run.+',
+                               ST = 'ST|study.+',
+                               SU = 'SU|submission.+')
+
+        return(expanded.names[[meta.string]])
+
+    }
+
     ############################################################################
     #(END) SUB-FUNCTIONS (END)
     ############################################################################
@@ -363,10 +376,13 @@ my.get.study.metadata <- function(studies_url, study_dirname, meta_types = NULL)
     }
 
     names(meta_types) <- meta_types
-    meta_types <- lapply(FUN = paste, X = meta_types, ".meta", sep = "")
+    meta_types_expnd <- lapply(meta_types, generalize.meta.string)
+    meta_types_expnd <- lapply(FUN = paste, X = meta_types_expnd, ".meta", sep = "")
+
+
 
     #Get the metadata
-    combined_meta_all <- lapply(X = meta_types,
+    combined_meta_all <- lapply(X = meta_types_expnd,
                                 FUN = function(mt){
                                     print(paste(study_dirname, mt))
                                     extract.metadata(meta_url = meta_url,
@@ -381,108 +397,6 @@ my.get.study.metadata <- function(studies_url, study_dirname, meta_types = NULL)
 }
 
 ################################################################################
-my.get.study.metadata.old <- function(studies_url, study_dirname, meta_types = NULL){
-    ############################################################################
-    #Input: (3 character)   URL to all public Atlas studies;
-    #                       name of specific study;
-    #                       vector of meta data types to fetch from the atlas
-    #
-    #Output: (single R object) A list of dataframes which, for the given study,
-    #           contains metadata for: Biosample, Study, Donor, Experiment, Run.
-    ############################################################################
-
-
-    ############################################################################
-    #SUB-FUNCTIONS
-    ############################################################################
-    extract.metadata <- function(meta_url, file_list, merge = T,
-                                 file_type_unique_string, sleep = 0.1){
-
-        #Process a single file
-        extract.meta <- function(meta_url, metadata_file){
-            text_only_meta_types <- c("EX.meta","RF.meta")
-
-            if(file_type_unique_string %in% text_only_meta_types){
-
-                print("Unsupported metadata file.")
-                print("Extract metadata by auxiliary process.")
-                return(NULL)
-
-            }
-
-            meta_url <- paste(meta_url, metadata_file, sep = '')
-
-            meta_dat <- retry.connection(target_url = meta_url, text_connect = T)
-
-            Sys.sleep(sleep)
-
-            #return(meta_dat)
-            return(as.matrix(meta_dat))
-        }
-
-        #Get and place metadata into a data frame
-        m_files <- grep(file_type_unique_string, file_list, value = T)
-
-        m_dat <- lapply(FUN = extract.meta, X = m_files, meta_url = meta_url)
-
-        gc()
-
-        if(!merge){
-            print("Returning unmerged study metadata.")
-            return(m_dat)
-        }
-
-
-        #m_dat_df <- Reduce(function(x,y){merge.data.frame(x, y,by = 1, all = T)}, m_dat)
-        m_dat_mtx <- Reduce(f = function(x,y){cbind(x,y[,-1])},x = m_dat)
-
-        print(paste("Returning merged study metadata for ", file_type_unique_string, "data",
-                    sep = "" ))
-
-        #return(m_dat_df)
-        return(m_dat_mtx)
-    }
-    ############################################################################
-    #(END) SUB-FUNCTIONS (END)
-    ############################################################################
-
-    #Get the list of metadata files for the study
-    study_url <- paste(studies_url, study_dirname, '/', sep = '')
-
-    dirs_data <- getURL(url = study_url, dirlistonly = T)
-    dirs_data <- unlist(strsplit(dirs_data,'\r\n'))
-
-    meta_dir <- grep('metadataFiles', dirs_data, value = T)
-    meta_url  <- paste(study_url, meta_dir,'/', sep = '')
-
-    dirs_data <- getURL(url = meta_url, dirlistonly = T)
-    dirs_data <- unlist(strsplit(dirs_data,'\r\n'))
-    meta_files <- grep('metadata.t[xs][tv]', dirs_data, value = T)
-
-
-    if(is.null(meta_types)){
-        cat("\nUsing default metadata types:")
-        cat("BS, DO, ST, SU\n")
-        meta_types <-  as.list(unlist(strsplit("BS,DO,ST,SU", ",")))
-    }
-
-    names(meta_types) <- meta_types
-    meta_types <- lapply(FUN = paste, X = meta_types, ".meta", sep = "")
-
-    #Get the metadata
-    combined_meta_all <- lapply(X = meta_types,
-                                FUN = function(mt){
-                                    print(paste(study_dirname, mt))
-                                    extract.metadata(meta_url = meta_url,
-                                                     file_list = meta_files, merge = T,
-                                                     file_type_unique_string = mt)
-                                })
-
-
-    gc()
-    Sys.sleep(1)
-    return(combined_meta_all)
-}
 
 ################################################################################
 write.study.meta.obj <-function(st){
@@ -567,7 +481,34 @@ get.atlas.metadata <- function(studies_url, studies_dirs, meta_types = FALSE, ge
 }
 
 
+my.get.study.metadata.file.list <- function(studies_url, study_dirname){
+    ############################################################################
+    #Input: (3 character)   URL to all public Atlas studies;
+    #                       name of specific study;
+    #                       vector of meta data types to fetch from the atlas
+    #
+    #Output: (single R object) A list of dataframes which, for the given study,
+    #           contains metadata for: Biosample, Study, Donor, Experiment, Run.
+    ############################################################################
 
+
+
+    #Get the list of metadata files for the study
+    study_url <- paste(studies_url, study_dirname, '/', sep = '')
+
+    dirs_data <- getURL(url = study_url, dirlistonly = T)
+    dirs_data <- unlist(strsplit(dirs_data,'\r\n'))
+
+    meta_dir <- grep('metadataFiles', dirs_data, value = T)
+    meta_url  <- paste(study_url, meta_dir,'/', sep = '')
+
+    dirs_data <- getURL(url = meta_url, dirlistonly = T)
+    dirs_data <- unlist(strsplit(dirs_data,'\r\n'))
+    meta_files <- grep('metadata.t[xs][tv]', dirs_data, value = T)
+    return(meta_files)
+
+
+}
 
 
 

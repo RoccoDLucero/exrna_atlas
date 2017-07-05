@@ -67,7 +67,7 @@ extract.univ.data <- function(dat_table, univ_fields){
 }
 
 ################################################################################
-get.ru.table <- function(atlas_metadata, studies, doc_type){
+get.ru.table <- function(atlas_metadata, studies){
 
     extract.dt.doc <- function(st){
 
@@ -102,6 +102,9 @@ get.ru.table <- function(atlas_metadata, studies, doc_type){
     }
 
     ############################################################################
+
+    doc_type <- "RU"
+
     studies_dat <- atlas_metadata[studies]
 
     tables <- lapply(X = names(studies_dat), extract.dt.doc)
@@ -164,16 +167,18 @@ get.doctype.tables <- function(atlas_metadata, studies, doc_type,
     ############################################################################
     if(doc_type == 'RU' & proc_run_tables){
 
-        ru_tbl <- get.ru.table(atlas_metadata, studies, doc_type)
+        ru_tbl <- get.ru.table(atlas_metadata, studies)
 
         return(t(ru_tbl))
 
     }
 
     studies_dat <- atlas_metadata[studies]
+    print(names(studies_dat))
 
     #get doc_type tables for all studies
     tables <- lapply(X = names(studies_dat), extract.dt.doc)
+    print(sum(sapply(tables,dim)[2,]))
 
     names(tables) <- names(studies_dat)
 
@@ -190,6 +195,7 @@ get.doctype.tables <- function(atlas_metadata, studies, doc_type,
     univ_dat <- lapply(X = tables, extract.univ.data, univ_fields = univ)
 
     univ_cmbd <- Reduce(f = cbind, x = univ_dat)
+    print(dim(univ_cmbd))
 
     return(univ_cmbd)
 }
@@ -229,8 +235,6 @@ reformat.names <- function(obj, dim){
 change.colnames <- function(table, from_name, to_name){
 
     cn <- colnames(table)
-
-    change_col <-
 
     cn[grep(pattern = from_name, x = cn)] <- to_name
 

@@ -7,6 +7,12 @@ library(stringr)
 
 make.meta.from.entex.names <- function(data){
 
+    flatten <- function(col_list){
+
+        sapply(X = col_list, FUN = function(x){paste(x, collapse = " & ")})
+
+    }
+    ############################################################################
     sn <- colnames(data)
 
     group <- str_extract(string = sn, pattern = "adult|fetal")
@@ -38,13 +44,20 @@ make.meta.from.entex.names <- function(data){
     meta_dat$time_unit  <- time_unit
     meta_dat$smp_src    <- smp_src
 
-    meta_df <- as.data.frame(Reduce(cbind,meta_dat), stringsAsFactors = T)
+    meta_dat <- lapply(meta_dat,flatten)
+
+    meta_df <- as.data.frame(Reduce(cbind, meta_dat), stringsAsFactors = T)
     colnames(meta_df) <- meta_vars
     rownames(meta_df) <- smp_id
+
+
 
 return(meta_df)
 
 }
+
+
+
 
 #Identify exRNA detected in a given propotion of samples at a given rpm value
 # so that we can reduce the size of the data
@@ -94,259 +107,188 @@ txfmLogistic3 <- function(x, a = 1/max(x)){ 1 / (1 + exp(1)^(-(a * (x-mean(x)) )
 txfmLogit <- function(x){log( x / (1 - x) )}
 
 
-################################################################################
-#FUNCTIONS FOR RETRIEVING AND PROCESSING EXRNA ATLAS METADATA
-################################################################################
-my.map.BSIDtoSampleName <- function(studies.url, study.dirname){
-    ############################################################################
-    #Input: (2 character)   URL to all public Atlas studies;
-    #                       name of specific study,
-    #
-    #Output: (single R object) A dataframes which  for the given study,
-    #           contains metadata for: Biosample, Study, Donor, Experiment, Run.
-    ############################################################################
 
-    #Load the ExRNA-Atlas Result files into memory and extract the
-    #BiosampleID sample name pairings
-    #Return a dataframe of pairings
+get.normalized.readcounts.obj <- function(df){
 
-    ############################################################################
-    #SUB-FUNCTIONS
-    ############################################################################
-    get.BS.smp.ID <- function(study.dirname, rf.string){
-        #Find and retrieve the sample name within an RF file for the study:
-        smp.qry.string <- paste(study.dirname,'.*', '/CORE_RESULTS/',sep = '')
+    df <- as.matrix(df, row.names = rownames(df), col.names = colnames(df))
 
-        sm <- str_extract(string = rf.string, pattern = smp.qry.string)
+    df_qn <- get.qn(df)
+    rownames(df_qn) <- rownames(df)
+    colnames(df_qn) <- colnames(df)
 
-        sm <- gsub(pattern = paste(study.dirname,'/',sep = ''), replacement = '', x = sm)
+    df_npn <- huge.npn(df_qn)
 
-        sm <- gsub(pattern = '/CORE_RESULTS/','',x = sm)
+    df_npn_lgstc <- apply(X = df_npn, MARGIN = 2, FUN = txfmLogistic1)
+    df_npn_lgstc <- df_npn_lgstc[ , complete.cases(t(df_npn_lgstc))]
 
-        BS.qry.string <- paste('Biosample ID\tEXR','.*','-BS',sep = '')
+    normalized_lst <- list(qn = df_qn,
+                           qn.npn = df_npn,
+                           qn.npn.lgstc =  df_npn_lgstc,
+                           original = df)
 
-        bs <- str_extract(string = rf.string, pattern = BS.qry.string)
-
-        bs <- gsub(pattern = 'Biosample ID\t', replacement = '', x = bs)
-
-        gc()
-
-        return(c(bs,sm))
-    }
-    ############################################################################
-    #Begin my.map.BSIDtoSampleName
-    ############################################################################
-
-    my.url <- paste(studies.url, study.dirname, '/', sep = '')
-    dirs.data <- retry.connection(target_url = my.url, dirs_only = T, text_connect = F)
-    dirs.data <- unlist(strsplit(dirs.data, '\r\n'))
-
-    meta.dir <- grep('metadataFiles', dirs.data, value = T)
-    my.url <- paste(my.url, meta.dir, '/', sep = '')
-    met.files <- retry.connection(target_url = my.url, dirs_only = T, text_connect = F)
-    met.files <- unlist(strsplit(met.files,'\r\n'))
-
-    #Now for each results file (-RF.metadata)
-    rf.files <- grep('-RF.metadata.tsv', met.files, value = T)
-    #mf <- rf.files[2]
-    mappings <- NULL
-    mpp <- NULL
-
-    #retry.connection(target_url = my.url, dirs_only = F, text_connect = F)
-    for(mf in rf.files){
-        print(mf)
-
-        my.url1 <- paste(my.url, mf, sep = '')
-        meta.dat <- NULL
-        attempt <- 0
-        while( is.null(meta.dat) && attempt <= 10 ) {
-            attempt <- attempt + 1
-            if(attempt > 1){
-                print(paste('retrying ', mf, ': attempt #', attempt, sep = ''))
-            }
-            try(meta.dat <- getURL(url = my.url1))
-            Sys.sleep(1)
-        }
-
-        Sys.sleep(1)
-        if(is.null(meta.dat) && attempt >= 10){
-            mpp <- c("Failed Download", "Failed Dowload")
-        }else{
-            mpp <- get.BS.smp.ID(study.dirname,meta.dat)
-        }
-        mpp <- c(mf,mpp,study.dirname)
-        mappings <- c(mappings,mpp)
-        my.url1 <- NULL
-
-
-    }
-
-    mappings <- as.data.frame(matrix(mappings,ncol = 4,byrow = T))
-    colnames(mappings) <-c("RF File","BS ID", "Sample Name", "Study")
-    return( t(mappings))
+    return(normalized_lst)
 }
 
 
-################################################################################
-my.get.study.metadata <- function(studies_url, study_dirname, meta_types = NULL){
-    ############################################################################
-    #Input: (3 character)   URL to all public Atlas studies;
-    #                       name of specific study;
-    #                       vector of meta data types to fetch from the atlas
-    #
-    #Output: (single R object) A list of dataframes which, for the given study,
-    #           contains metadata for: Biosample, Study, Donor, Experiment, Run.
-    ############################################################################
 
 
-    ############################################################################
-    #SUB-FUNCTIONS
-    ############################################################################
-    extract.metadata <- function(meta_url, file_list, merge = T,
-                                 file_type_unique_string, sleep = 0.1){
+sep.df.by.colname.pttn <- function(df, patterns = NULL){
 
-        #Process a single file
-        extract.meta <- function(meta_url, metadata_file){
-            text_only_meta_types <- c("EX.meta","RF.meta")
+    gencode_types <- list("Y_RNA", "snoRNA", "snRNA", "lincRNA", "miRNA",
+                          "protein_coding", "processed_transcript" )
 
-            if(file_type_unique_string %in% text_only_meta_types){
+    if(is.null(patterns)){patterns <- gencode_types}
 
-                print("Unsupported metadata file.")
-                print("Extract metadata by auxiliary process.")
-                return(NULL)
+    make_new_df <-  function(rna_type){
+        df_cols <- grep(rna_type, colnames(df))
+        return(df[,df_cols])
 
-            }
-
-            meta_url <- paste(meta_url, metadata_file, sep = '')
-
-            meta_dat <- retry.connection(target_url = meta_url, text_connect = T)
-
-            Sys.sleep(sleep)
-
-            return(meta_dat)
-        }
-
-        #Get and place metadata into a data frame
-        m_files <- grep(file_type_unique_string, file_list, value = T)
-
-        m_dat <- lapply(FUN = extract.meta, X = m_files, meta_url = meta_url)
-
-        gc()
-
-        if(!merge){
-            print("Returning unmerged study metadata.")
-            return(m_dat)
-        }
-
-        m_dat_df <- Reduce(function(x,y){merge.data.frame(x, y,by = 1, all = T)}, m_dat)
-        #m_dat_df <- Reduce(merge, m_dat)
-
-        print(paste("Returning merged study metadata for ", file_type_unique_string, "data",
-                    sep = "" ))
-
-        return(m_dat_df)
-    }
-    ############################################################################
-    #(END) SUB-FUNCTIONS (END)
-    ############################################################################
-
-    #Get the list of metadata files for the study
-    study_url <- paste(studies_url, study_dirname, '/', sep = '')
-
-    dirs_data <- getURL(url = study_url, dirlistonly = T)
-    dirs_data <- unlist(strsplit(dirs_data,'\r\n'))
-
-    meta_dir <- grep('metadataFiles', dirs_data, value = T)
-    meta_url  <- paste(study_url, meta_dir,'/', sep = '')
-
-    dirs_data <- getURL(url = meta_url, dirlistonly = T)
-    dirs_data <- unlist(strsplit(dirs_data,'\r\n'))
-    meta_files <- grep('metadata.t[xs][tv]', dirs_data, value = T)
-
-
-    if(is.null(meta_types)){
-        cat("\nUsing default metadata types:")
-        cat("BS, DO, ST, SU\n")
-        meta_types <-  as.list(unlist(strsplit("BS,DO,ST,SU", ",")))
     }
 
-    names(meta_types) <- meta_types
-    meta_types <- lapply(FUN = paste, X = meta_types, ".meta", sep = "")
+    new_dfs <- lapply(X = patterns, FUN = make_new_df)
 
-    #Get the metadata
-    combined_meta_all <- lapply(X = meta_types,
-                                FUN = function(mt){
-                                    print(paste(study_dirname, mt))
-                                    extract.metadata(meta_url = meta_url,
-                                                     file_list = meta_files, merge = T,
-                                                     file_type_unique_string = mt)
-                                })
+    names(new_dfs) <- patterns
 
+    return(new_dfs)
 
-    gc()
-    Sys.sleep(1)
-    return(combined_meta_all)
 }
 
 
-################################################################################
-my.merge.metadata <- function(studies_url, studies_dirs, meta_types = FALSE){
-    ############################################################################
-    #Input: (3 character)   URL to all public Atlas studies;
-    #                       name of desired studies;
-    #                       name of desired meta data doc types (BS, DO, SU, ST)
-    #
-    #Output: (single R object) A list of dataframes which, for the doc type,
-    #           contains metadata for: all sudies in studies_dirs
-    ############################################################################
+subset.on.shared.probes <- function(ref_df, exp_df){
+    avail_probes <- intersect(colnames(ref_df), colnames(exp_df))
+    ref_df <- ref_df[, avail_probes]
+    exp_df <- exp_df[, avail_probes]
 
-
-    ############################################################################
-    #SUB-FUNCTIONS
-    ############################################################################
-
-    cat("\n", rep("=",60), "\n", sep = "")
-    cat("\n", "Acquiring metadata for:", "\n")
-    print(studies_dirs)
-    cat("\n", rep("=",60), "\n", sep = "")
-
-    all_meta_by_study <- lapply(studies_dirs,
-                                function(st){
-                                    my.get.study.metadata(studies_url = studies_url,
-                                                          study_dirname = st,
-                                                          meta_types)
-                                })
-
-    all_meta_by_doc <-  unlist(all_meta_by_study, recursive = F, use.names = T)
-
-    md_doc_groups <- grp.by.list.names( all_meta_by_doc )
-
-    all_meta_by_doc_group <- apply(md_doc_groups, 2,
-                                   function(grp){all_meta_by_doc[grp]})
-
-
-    merged_meta_by_doc_group <- lapply(all_meta_by_doc_group,
-                                       function(doc_lst){
-                                           Reduce(function(x, y){
-                                               merge.data.frame(x, y, by = 1, all = T)},
-                                               doc_lst)
-                                       })
-
-    merged_meta_by_doc_group <- lapply( merged_meta_by_doc_group,
-                                        function(df){
-                                            df <- t(df)
-
-                                            df[1,] <- gsub("^X\\.+", "", make.names(df[1,]))
-
-                                            return(df)
-                                        })
-
-    merged_meta_by_doc_group["Access Date"] <- paste( "This record was created on:",
-                                                      Sys.time(),sep = " " )
-    cat("Timestamp Added.")
-
-    gc()
-
-    return( merged_meta_by_doc_group )
+    return(list(ref =  ref_df, exp = exp_df))
 }
+
+make.colors.vector <- function(factor_vec, color_fun = rainbow){
+
+    color.function <- color_fun
+
+    colors <- as.factor(factor_vec)
+
+    levels(colors) <- color.function(length(colors))
+
+    return(as.character(colors))
+
+}
+
+perform.probe.selection <- function(ref_probes, ref_classes, max_p_val = 1e-3,
+                                    n_markers = 100, method = c("one.vs.rest", "each.pair" )){
+
+    info_probes <- lapply(X = method, run_edec_stage_0)
+
+    names(info_probes) <- method
+
+    if(length(info_probes) > 1){info_probes[['max_set']] <- Reduce(f = union, x = info_probes)}
+
+    return(info_probes)
+
+}
+
+get.correlation.heatmaps <- ( )
+
+
+
+
+
+######################################################################################################
+#functions from K_cell_number.R
+
+pMatrix.min <- function(A, B) {
+    # finds the permutation P of A such that ||PA - B|| is minimum
+    # in Frobenius norm
+    # Uses the linear-sum assignment problem (LSAP) solver
+    # in the "clue" package
+    # Returns P%*%A and the permutation vector `pvec' such that
+    # A[pvec, ] is the permutation of A closest to B
+    n <- nrow(A)
+    D <- matrix(NA, n, n)
+    for (i in 1:n) {
+        for (j in 1:n) {
+            #           D[j, i] <- sqrt(sum((B[j, ] - A[i, ])^2))
+            D[j, i] <- (sum((B[j, ] - A[i, ])^2))  # this is better
+        } }
+    vec <- c(solve_LSAP(D))
+    list(A=A[vec,], pvec=vec)
+}
+
+
+meth.cor.min <- function(E1, E2,i) {
+    d = diag(1, i, i)
+    c = cor(E1,E2)
+    f= pMatrix.min(c,d)
+    min(diag(f$A)) }
+
+
+prop.cor.min <- function(E1, E2,i) {
+    d = diag(1, i, i)
+    com = intersect(row.names(E1),row.names(E2))
+    c = cor(E1[com,],E2[com,])
+    f= pMatrix.min(c,d)
+    min(diag(f$A))}
+
+#find cell number
+
+find.cell.number <- function(lower,upper,reps,probes,tum_df){
+    measure = data.frame(0,0,0)
+    for(i in lower:upper){
+        prop = list()
+        meth = list()
+        for(k in 1:reps){
+            num <- sample(1:ncol(tum_df), round((0.8*ncol(tum_df)),0), replace=F)
+            tum = tum_df[,num]
+            tum = as.matrix(tum)
+            x = EDecStage1(methMixtureSamples = tum,cellTypeSpecificLoci = probes,nCts = i)
+            prop[[k]] <- as.data.frame(x$proportions)
+            meth[[k]] <- as.data.frame(x$methylation)}
+        pro = c()
+        met = c()
+        comb = combn( 1:length(prop), 2)
+        for(col in 1:ncol(comb)){
+            met[[length(met)+1]] <- meth.cor.min(meth[[comb[1,col]]],meth[[comb[2,col]]],i)
+            pro[[length(pro)+1]] <- prop.cor.min(prop[[comb[1,col]]],prop[[comb[2,col]]],i)
+        }
+
+        results = c(i,round(min(met),3),round(min(pro),3))
+        measure = rbind(measure,results)
+    }
+    measure = measure[2:nrow(measure),]
+    colnames(measure) = c("Cell_Number","Meth_Cor","Prop_Cor")
+    return(measure)
+}
+
+find.cell.number.Return <- function(lower,upper,reps,probes,tum_df){
+    measure = data.frame(0,0,0)
+    for(i in lower:upper){
+        prop = list()
+        meth = list()
+        for(k in 1:reps){
+            num <- sample(1:ncol(tum_df), round((0.8*ncol(tum_df)),0), replace=F)
+            tum = tum_df[,num]
+            tum = as.matrix(tum)
+            x = EDecStage1(methMixtureSamples = tum,cellTypeSpecificLoci = probes,nCts = i)
+            prop[[k]] <- as.data.frame(x$proportions)
+            meth[[k]] <- as.data.frame(x$methylation)}
+        pro = c()
+        met = c()
+        comb = combn( 1:length(prop), 2)
+        for(col in 1:ncol(comb)){
+            met[[length(met)+1]] <- meth.cor.min(meth[[comb[1,col]]],meth[[comb[2,col]]],i)
+            pro[[length(pro)+1]] <- prop.cor.min(prop[[comb[1,col]]],prop[[comb[2,col]]],i)
+        }
+
+        results = c(i,round(min(met),3),round(min(pro),3))
+        measure = rbind(measure,results)
+    }
+    measure = measure[2:nrow(measure),]
+    colnames(measure) = c("Cell_Number","Meth_Cor","Prop_Cor")
+    assign("Prop_80",prop,.GlobalEnv)
+    assign("Meth_80",meth,.GlobalEnv)
+    return(measure)
+}
+############################################################################################################
+
+
 
