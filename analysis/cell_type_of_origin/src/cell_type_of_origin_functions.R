@@ -50,14 +50,9 @@ make.meta.from.entex.names <- function(data){
     colnames(meta_df) <- meta_vars
     rownames(meta_df) <- smp_id
 
-
-
-return(meta_df)
+    return(meta_df)
 
 }
-
-
-
 
 #Identify exRNA detected in a given propotion of samples at a given rpm value
 # so that we can reduce the size of the data
@@ -106,9 +101,10 @@ txfmLogistic2 <- function(x, a = 1/max(x)){ 1.5*( 1 - exp(1)^(-(a * x)) ) }
 txfmLogistic3 <- function(x, a = 1/max(x)){ 1 / (1 + exp(1)^(-(a * (x-mean(x)) ) )) }
 txfmLogit <- function(x){log( x / (1 - x) )}
 
+factor_to_numeric <- function(fac){as.numeric(as.character(fac))}
 
 
-get.normalized.readcounts.obj <- function(df){
+get.normalized.readcounts.obj <- function(df, na_rm = T){
 
     df <- as.matrix(df, row.names = rownames(df), col.names = colnames(df))
 
@@ -119,7 +115,10 @@ get.normalized.readcounts.obj <- function(df){
     df_npn <- huge.npn(df_qn)
 
     df_npn_lgstc <- apply(X = df_npn, MARGIN = 2, FUN = txfmLogistic1)
-    df_npn_lgstc <- df_npn_lgstc[ , complete.cases(t(df_npn_lgstc))]
+
+    if(na_rm){
+            df_npn_lgstc <- df_npn_lgstc[ , complete.cases(t(df_npn_lgstc))]
+    }
 
     normalized_lst <- list(qn = df_qn,
                            qn.npn = df_npn,
@@ -159,7 +158,7 @@ subset.on.shared.probes <- function(ref_df, exp_df){
     ref_df <- ref_df[, avail_probes]
     exp_df <- exp_df[, avail_probes]
 
-    return(list(ref =  ref_df, exp = exp_df))
+    return(list(ref = ref_df, exp = exp_df))
 }
 
 make.colors.vector <- function(factor_vec, color_fun = rainbow){
@@ -174,20 +173,136 @@ make.colors.vector <- function(factor_vec, color_fun = rainbow){
 
 }
 
-perform.probe.selection <- function(ref_probes, ref_classes, max_p_val = 1e-3,
-                                    n_markers = 100, method = c("one.vs.rest", "each.pair" )){
 
-    info_probes <- lapply(X = method, run_edec_stage_0)
+my.run.edec.stage.0 <- function (reference_meth, reference_classes,
+                                 max_p_value, num_markers, version = "one.vs.rest"){
+    num_comps = NULL
+    num_hyper_markers_per_comp = NULL
+    t_test_results = NULL
+    if (version == "one.vs.rest") {
+        num_comps <- length(unique(reference_classes))
+        t_test_results <- EDec:::perform_t_tests_all_classes_one_vs_rest(reference_meth,
+                                                                  reference_classes)
+        num_hyper_markers_per_comp <- ceiling((num_markers/num_comps)/2)
+    }
+    else if (version == "each.pair") {
+        t_test_results <- EDec:::perform_t_tests_all_classes_each_pair(reference_meth,
+                                                                reference_classes)
+        num_comps <- ncol(t_test_results$p.values)
+        num_hyper_markers_per_comp <- ceiling((num_markers/num_comps)/2)
+    }
+    else {
+        stop("Error: type has to be either 'one.vs.rest' or 'each.pair'")
+    }
+
+    markers <- NULL
+    for (i in 1:num_comps) {
+        significant_loci <- names(which(t_test_results$p.values[,i] <= max_p_value))
+
+        significant_loci <- setdiff(significant_loci, markers)
+
+        hyper_loci <- names(utils::tail(sort(t_test_results$diff.means[significant_loci, i]),
+                                        num_hyper_markers_per_comp))
+
+        hypo_loci <- names(utils::head(sort(t_test_results$diff.means[significant_loci, i]),
+                                       num_hyper_markers_per_comp))
+
+        markers <- c(markers, hyper_loci, hypo_loci)
+    }
+
+    num_extra_markers <- length(markers) - num_markers
+
+    if (num_extra_markers > 0) {
+        min_p_values <- apply(t_test_results$p.values[markers,], 1, min)
+
+        markers_to_drop <- utils::tail(sort(min_p_values, index.return = TRUE)$ix,
+                                       num_extra_markers)
+
+        markers <- markers[-markers_to_drop]
+    }
+    return(list(probes = markers, t_test = t_test_results))
+}
+
+
+
+
+
+perform.probe.selection <- function(ref_probes, ref_classes, max_p_val = 1e-4,
+                                    n_markers = 100, method = list("one.vs.rest", "each.pair" )){
+
+    info_probes <- lapply(X = method,
+                          FUN = function(mth){
+                             print(mth)
+                             my.run.edec.stage.0(version = mth, reference_meth = ref_probes,
+                                              reference_classes = ref_classes,
+                                              max_p_value = max_p_val, num_markers = n_markers)}
+
+    )
 
     names(info_probes) <- method
 
     if(length(info_probes) > 1){info_probes[['max_set']] <- Reduce(f = union, x = info_probes)}
 
+    info_probes[['no_selection']] <- rownames(ref_probes)
+
     return(info_probes)
 
 }
 
-get.correlation.heatmaps <- ( )
+
+
+check_stage1_results <- function(stage1_result, probeset = 'all', reference_profiles,
+                                 sample_meta_colors = F,
+                                 ref_colors = F, show_corrs = T, show_props = T){
+
+    n_ct <- ncol(stage1_result$methylation)
+    use_all_probes <-  (length(probeset) == 1  && probeset == "all")
+    if(use_all_probes){probeset <- seq(nrow(stage1_result$methylation))}
+
+    cors_deconv_refs = cor(reference_profiles[probeset, ], stage1_result$methylation[probeset,] )
+
+    # Check what references had the highest correlation with each
+    # of the estimated methylation profiles
+    best_cors = rbind(apply(cors_deconv_refs,2,which.max),
+                      apply(cors_deconv_refs,2,max))
+
+    best_cor_labels = matrix("",nrow=nrow(cors_deconv_refs),
+                             ncol=ncol(cors_deconv_refs))
+    for (i in seq(n_ct)){
+        best_cor_labels[best_cors[1,i],i] = as.character(round(best_cors[2,i],2))
+    }
+
+    if(show_corrs){
+        # Plot correlation matrix
+        #main = "Inferred vs. reference\nexpression profile correlations"
+        main = 'title'
+        gplots::heatmap.2(cors_deconv_refs,
+                          trace="none", col = heat_colors,
+                          breaks = heat_breaks, margins = heat_margins,
+                          RowSideColors = ref_colors,
+                          main = main, key.xlab = "Expression correlation",
+                          cellnote = best_cor_labels,
+                          notecol="black")
+    }
+
+    if(show_props){
+        colnames(stage1_result$proportions) <- colnames(stage1_result$methylation)
+
+        col_grad = colorRampPalette(c("white","steelblue"))
+
+        #main = "Per sample Composition\nof inferred profiles"
+        gplots::heatmap.2( stage1_result$proportions,
+                           trace="none",
+                           col = col_grad(10),
+                           breaks=seq(0,1,0.1),
+                           margins=c(10,4),
+                           labRow = FALSE ,
+                           RowSideColors = sample_meta_colors)
+    }
+}
+
+
+
 
 
 

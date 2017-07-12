@@ -1,7 +1,7 @@
-##cell_type_of_origin_by_mirna.R
+##cell_type_of_origin_by_generic.R
 ##by: Rocco Lucero
 ##started: June 19, 2017
-##last updated: July 3, 2017
+##last updated: July 6, 2017
 ##
 ##Objective: Identify tissue of origin, or cell type of origin signatures
 ##    in extracellular RNA component of various biofluids
@@ -23,7 +23,12 @@ library(EDecExampleData)
 set.seed(20170620)
 
 
-min_sd <- 1
+min_sd <- 0.07
+normalization_types <- list("qn","qn.npn","qn.npn.lgstc","original")
+names(normalization_types) <- normalization_types
+normalization <- normalization_types$qn.npn.lgstc
+
+if(T){
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
@@ -36,238 +41,210 @@ entex_data_file <- paste("./input/getex/exceRpt_ENCODE_smallRNAseq_merged_result
 
 load(file = entex_data_file)
 
-##Select mirnatable
-entex_mirna <- t(exprs.miRNA.rpm)
-
 ##create metadata##
 entex_meta_all <- make.meta.from.entex.names(exprs.miRNA.rpm)
 
-##exclude cell line and fetal samples)##
+################################################################################
+##Filter on Metadata Properties of Reference Profiles
+################################################################################
 adult_samples <- with(entex_meta_all, (group == 'adult' & smp_src != 'GM12878'))
+entex_meta <- entex_meta_all[adult_samples,]
 
-entex_meta_adult <- entex_meta_all[adult_samples,]
-entex_meta_adult  <- droplevels.data.frame(x = entex_meta_adult)
+#entex_meta$age <- factor_to_numeric(entex_meta$age)
+#entex_meta <- subset.data.frame(x = entex_meta, subset = entex_meta$age > 37)
 
-tissue_subset <- grep('spleen|liver|lung|stomach', entex_meta_adult$smp_src, value = T )
-samp_subset <- which(entex_meta_adult$smp_src %in% tissue_subset)
-table(unlist(entex_meta_adult[which(entex_meta_adult$smp_src %in% tissue_subset),][,'smp_src']))
+tissues_for_analysis <- 'spleen|lung|stomach|adrenal'
+tissue_subset <- grep(tissues_for_analysis, entex_meta$smp_src, value = T )
+
+samp_subset <- which(entex_meta$smp_src %in% tissue_subset)
+entex_meta <- droplevels.data.frame(entex_meta[samp_subset, ])
+
+
+
+table(unlist(entex_meta[which(entex_meta$smp_src %in% tissue_subset),][,'smp_src']))
+
 
 ##subset entex reads##
-keep_mirna <- !(apply(X = entex_mirna, MARGIN = 2, FUN = filterBySD, min_sd = min_sd))
-table(keep_mirna)
+entex_rna_types <- list(exprs.miRNA.rpm, exprs.piRNA.rpm, exprs.tRNA.rpm)
+entex_rna <- t(Reduce(f = rbind, entex_rna_types))
 
-mirna_adult <- entex_mirna[adult_samples, keep_mirna]
-rownames(mirna_adult) <- rownames(entex_meta_adult)
-mirna_adult <- mirna_adult[samp_subset, ]
-entex_meta_adult <- entex_meta_adult[samp_subset, ]
+entex_rna <- entex_rna[adult_samples, ]
 
-tissue_refs_nrmlzd <- get.normalized.readcounts.obj(mirna_adult)
+entex_rna <- entex_rna[samp_subset, ]
 
+rownames(entex_rna) <- rownames(entex_meta)
+
+tissue_refs_nrmlzd <- get.normalized.readcounts.obj(df = entex_rna, na_rm = T)
+entex_rna <- tissue_refs_nrmlzd[[normalization]]
+
+
+quantile(apply(X = entex_rna, MARGIN = 2, FUN = sd))
+keep_rna <- !(apply(X = entex_rna, MARGIN = 2, FUN = filterBySD, min_sd = min_sd))
+table(keep_rna)
+
+entex_rna <- entex_rna[, keep_rna]
 ####################################################################################################
 ###################
 #######ATLAS######
 
 ##Load ExRNA Atlas rpm data and metadata##
-exrna_atlas_1 <- readRDS("../get_atlas_data_in_R/interim/exrna_atlas_readcounts_non_gencode.RDS")
-exrna_atlas_meta <- readRDS(file = '../cell_type_of_origin/input/comprehensive_atlas_metadata_draft_1.RDS')
+#atlas_exrna_tables_genc  <- readRDS("../get_atlas_data_in_R/interim/exrna_atlas_readcounts_gencode_split.RDS")
+#atlas_exrna_tables_genc  <- readRDS("../get_atlas_data_in_R/interim/exrna_atlas_readcounts_gencode_mixed.RDS")
+atlas_exrna_tables   <- readRDS("../get_atlas_data_in_R/interim/exrna_atlas_readcounts_non_gencode.RDS")
+atlas_exrna <- Reduce(f = cbind, atlas_exrna_tables)
 
-#select miRNA table
-atlas_mirna <- exrna_atlas_1$miRNA
+atlas_meta <- readRDS(file = '../cell_type_of_origin/input/comprehensive_atlas_metadata_draft_1.RDS')
 
-##subset samples on metadata properties##
-blood_fractions <- grep("[Pp]lasma|Serum",exrna_atlas_meta$Biofluid.Name )
+##############################
+blood_samples <- grep("plasma|serum", atlas_meta$Biofluid.Name, ignore.case = T)
+healthy_samples <- grep("control", atlas_meta$Donor.Type, ignore.case = T)
+kjens_study <- grep("KJENS", atlas_meta$Study, ignore.case = T)
+sex <- grep("male", atlas_meta$Sex, ignore.case = T)
 
-blood_samples <- exrna_atlas_meta[blood_fractions,]$Sample.Name
+subset_options <- list(blood_samples, healthy_samples, kjens_study, sex)[c(1,2)]
 
-atlas_mirna <- atlas_mirna[blood_samples,]
+atlas_subset <- Reduce(f = intersect, x = subset_options) # <===============
+############################
+atlas_meta   <- atlas_meta[atlas_subset,]
+
+atlas_exrna <- atlas_exrna[as.character(atlas_meta$Sample.Name),]
+all(rownames(atlas_exrna) == as.character(atlas_meta$Sample.Name))
+
 
 ##subset atlas reads and normalize##
-keep_mirna <- !(apply(X = atlas_mirna, MARGIN = 2, FUN = filterBySD, min_sd = min_sd))
-table(keep_mirna)
+atlas_nrmlzd <- get.normalized.readcounts.obj(df = atlas_exrna, na_rm = T)
+atlas_exrna <- atlas_nrmlzd[[normalization]]
 
-atlas_mirna <- atlas_mirna[ , keep_mirna]
+quantile(apply(X = entex_rna, MARGIN = 2, FUN = sd))
+keep_exrna <- !(apply(X = atlas_exrna, MARGIN = 2, FUN = filterBySD, min_sd = min_sd))
+table(keep_exrna)
 
-atlas_mirna_nrmlzd <- get.normalized.readcounts.obj(atlas_mirna)
+atlas_exrna <- atlas_exrna[, keep_exrna]
 
 
 ##tidy the global environment##
 rm_dat <- grep(pattern = "exogenous", value = T, x = ls())
 do.call(rm, as.list(rm_dat))
-rm(exrna_atlas_1)
+
 
 ####################################################################################################
+refs <- entex_rna
+refs_meta <- entex_meta
+rownames(refs) <- make.names(refs_meta$smp_src,unique = T)
 
-####################################################################################################
+target <- atlas_exrna
+target_meta <- atlas_meta
 
-####################################################################################################
-tiss_refs <- tissue_refs_nrmlzd$qn.npn.lgstc
-tiss_meta <- droplevels.data.frame(entex_meta_adult)
-rownames(tiss_refs) <- tiss_meta$smp_src
+###############################################################################
+probe_sel_max_p <- 1e-2
+edec_input_data <- lapply(subset.on.shared.probes(ref_df = refs, exp_df = target),t)
+lapply(edec_input_data, dim)
 
-atlas_blood_mirna <- atlas_mirna_nrmlzd$qn.npn.lgstc
-atlas_blood_meta <- droplevels.data.frame(exrna_atlas_meta[blood_fractions,])
-
-refs_meta #add later
-target_meta #add later
-
-edec_input_data <- subset.on.shared.probes(ref_df = refs, exp_df = dat)
+informative_probes <- perform.probe.selection(ref_probes =  edec_input_data$ref,
+                                              ref_classes = refs_meta$smp_src,
+                                              n_markers = 40,
+                                              max_p_val = probe_sel_max_p)
 
 
 
-################################################################################
-# Create a vector of colors representing the tissue type of each reference
-factor_vars_list <- list( refs_meta$ )
 
+#selected_probes <- select.best.probes(informative_probes, probes_per_comparison = 15)
+tmp1 <- lapply(c(1:4), function(x){head(sort(informative_probes$one.vs.rest$t_test$p.values[,x]),20)})
+tmp2 <- unique(names(unlist(tmp1)))
+informative_probes1 <- tmp2
+
+tmp11 <- lapply(c(1:4), function(x){head(sort(informative_probes$each.pair$t_test$p.values[,x]),20)})
+tmp22 <- unique(names(unlist(tmp11)))
+informative_probes2 <- tmp22
+informative_probes <- union(informative_probes1, informative_probes2)
+expression_correlations_refs <- list(test = cor(edec_input_data$ref[informative_probes,]))
+
+#expression_correlations_refs <- lapply(X = informative_probes,
+#                                       FUN = function(probes){cor(edec_input_data$ref[probes,],use = 'complete.obs')})
+
+
+###############################################################################
+if(T){
+factor_vars_list <- list(refs_classes = refs_meta$smp_src, biofluid = target_meta$Biofluid.Name)
 factor_colors <-  lapply(factor_vars_list, make.colors.vector)
-# Create a color gradient to be used in a heatmap of correlations
+col_colors <- factor_colors$refs_classes
+row_colors <- factor_colors$refs_classes
 
-cbreaks <- 40
-col_step <- 2/cbreaks
-heat_breaks = seq(-1,1,col_step)
-heat_colors = list(red_green = redgreen(cbreaks),
-                   col_grad = colorRampPalette(c("white","steelblue")))
+#Function to set heatmap parameters {cbreaks heatmin heatmax colorstyle heatmargins, col_colors, row_colors }
+cbreaks <- 20
+heat_min <- 0
+heat_max <- 1
+heat_range <- (heat_max - heat_min)
+col_step <- heat_range / cbreaks
+heat_breaks <- seq(heat_min, heat_max, col_step)
+n_colors    <- length(heat_breaks) - 1
+heat_colors <- list(red_green = redgreen(n_colors), col_grad = colorRampPalette(c("white","steelblue"))(n_colors))
+heat_colors <- heat_colors[[2]]
+heat_margins <- c(15,15)
 
-heat_margins = c(15,15)
+}
 
+sapply(X = names(expression_correlations_refs),
+       FUN = function(probeset){
+           cors <- expression_correlations_refs
+           main = probeset
+           print(probeset)
+           heatmap.2(x = cors[[probeset]], trace="none", col = heat_colors,
+                      breaks = heat_breaks, margins = heat_margins, ColSideColors = col_colors, RowSideColors = row_colors,
+                      main = main, key.xlab = "Expression correlation" )
+})
 
-################################################################################
-
-
-
-
-
-# Selecting marker loci based on comparisons of each class of reference against
-# all other samples
-informative_probes <- perform.probe.selection( )
-
-cors_ref <- cor(x = ref)
-cors_tiss_markers_ovr <- cor(t(tiss_refs)[markers_ovr,])
-cors_tiss_markers_ep <- cor(t(tiss_refs)[markers_ep,])
-
-my_probes <- intersect(colnames(atlas_blood_mirna), union(markers_ep, markers_ovr))
-cors_tiss_markers_all <- cor(t(tiss_refs)[my_probes,])
-
-sapply(X = probe_sets_list, FUN = get_heatmaps)
-heatmap.2(cors_ref,
-          trace="none",
-          col = heat_colors,
-          breaks = heat_breaks,
-          margins = heat_margins,
-          ColSideColors = col_colors,
-          RowSideColors = row_colors)
-
+ }
+####################################################################################################
+n_ct <- 5
+my_probes <- informative_probes #$max_set
 ####################################################################################################
 ## EDEC STAGE 1 ENTEX DATA
 ####################################################################################################
-n_ct <- 4
-
-stage1_res_tiss_refs = EDec::run_edec_stage_1(meth_bulk_samples = t(tiss_refs),
+stage1_refs <- run_edec_stage_1(meth_bulk_samples = edec_input_data$ref,
                            informative_loci = my_probes,
                            num_cell_types = n_ct)
-check_cors_tiss <-T
-if(check_cors_tiss){
-    # Compute correlation between estimated methylation profiles,
-    # and reference methylation profiles
-    cors_deconv_refs = cor(t(tiss_refs)[my_probes,],
-                               stage1_res_tiss_refs$methylation[my_probes,])
 
-    # Check what references had the highest correlation with each
-    # of the estimated methylation profiles
-    best_cors = rbind(apply(cors_deconv_refs,2,which.max),
-                      apply(cors_deconv_refs,2,max))
-
-    best_cor_labels = matrix("",nrow=nrow(cors_deconv_refs),
-                             ncol=ncol(cors_deconv_refs))
-    for (i in seq(n_ct)){
-        best_cor_labels[best_cors[1,i],i] = as.character(round(best_cors[2,i],2))
-    }
-
-    # Plot correlation matrix
-    gplots::heatmap.2(cors_deconv_refs,
-                      trace="none",
-                      #col=color_gradient(10),
-                      #breaks=seq(0,1,0.1),
-                      col= redgreen(cbreaks ),
-                      breaks=seq(-1,1,col_step),
-                      margins=c(4,12),
-                      RowSideColors = tiss_colors,
-                      cellnote = best_cor_labels,
-                      notecol="black")
-}
-
-colnames(stage1_res_tiss_refs$proportions) <- colnames(stage1_res_tiss_refs$methylation)
-
-
-gplots::heatmap.2( stage1_res_tiss_refs$proportions,
-                  trace="none",
-                  col=color_gradient(10),
-                  breaks=seq(0,1,0.1),
-                  margins=c(10,4),
-                  labRow = FALSE ,
-                  RowSideColors = tiss_colors)
-####################################################################################################
-
-
-
+check_stage1_results(stage1_result = stage1_refs, probeset = my_probes,
+                     sample_meta_colors = factor_colors$refs_classes,
+                     reference_profiles = edec_input_data$ref,
+                     ref_colors = factor_colors$refs_classes)
 
 ####################################################################################################
-## EDEC STAGE 1 : ON EXRNA ATLAS DATA no reference profiles
+## EDEC STAGE 1 : ON EXRNA ATLAS DATA with reference profiles
 ####################################################################################################
-atlas_rc_subset <- atlas_blood_mirna
-spike_in <- tiss_refs[1:4, ]
-
-atlas_blood_pls_refs_mirna <- rbind(atlas_blood_mirna, spike_in)
-
-atlas_rc_subset <- atlas_blood_pls_refs_mirna
+refs_spike_in_idx <-  c(1:5,8) #seq_along(colnames(edec_input_data$ref ))
+refs_spike_in <- edec_input_data$ref[,refs_spike_in_idx]
+exp_w_refs <- cbind(edec_input_data$exp, refs_spike_in)
 
 
-stage1_res_atlas_pls_refs = EDec::run_edec_stage_1(meth_bulk_samples = t(atlas_rc_subset),
+stage1_exp_w_refs = EDec::run_edec_stage_1(meth_bulk_samples = exp_w_refs,
                                                   informative_loci = my_probes,
                                                   num_cell_types = n_ct)
 
-colnames(stage1_res_atlas_no_refs$methylation) <- LETTERS[seq(n_ct)]
+colnames(stage1_exp_w_refs$methylation) <- LETTERS[seq(n_ct)]
 
-atlas_deconv_cors <- T
-prof_a <- t(tiss_refs)[my_probes,]
-prof_b <- stage1_res_atlas_pls_refs$methylation[my_probes, ]
-
-if(atlas_deconv_cors){
-    cors_deconv = cor(prof_a, prof_b)
-
-    best_cors = rbind(apply(cors_deconv, 2, which.max), apply(cors_deconv, 2, max))
-
-    best_cor_labels = matrix("", nrow=nrow(cors_deconv), ncol=ncol(cors_deconv))
-
-    for (i in seq(n_ct)){
-        best_cor_labels[best_cors[1, i], i] = as.character(round(best_cors[2, i], 2))
-    }
-
-    # Plot correlation matrix
-    gplots::heatmap.2(cors_deconv,
-                      trace="none",
-                      #col=color_gradient(10),
-                      #breaks=seq(0,1,0.1),
-                      col= redgreen(cbreaks),
-                      breaks=seq(-1,1,col_step),
-                      margins=c(4,12),
-                      RowSideColors = tiss_colors,
-                      cellnote = best_cor_labels,
-                      notecol="black")
+check_stage1_results(stage1_result = stage1_exp_w_refs, probeset = my_probes, show_props = T,
+                     sample_meta_colors = c(factor_colors$biofluid,
+                                            factor_colors$refs_classes[refs_spike_in_idx]),
+                     reference_profiles = edec_input_data$ref,
+                     ref_colors =  factor_colors$refs_classes)
 
 
-}
+####################################################################################################
+## EDEC STAGE 1 : ON EXRNA ATLAS DATA without reference profiles
+####################################################################################################
+if(F){
+exp_wo_refs <- edec_input_data$exp
 
-if(T){
-    # Plot a heat map of proportions of constituent cell types in
-    # each sample with a side bar indicating whether the sample is
-    # tumor or normal
+stage1_exp_wo_refs = EDec::run_edec_stage_1(meth_bulk_samples = exp_wo_refs,
+                                            informative_loci = my_probes,
+                                            num_cell_types = n_ct)
 
+colnames(stage1_exp_wo_refs$methylation) <- LETTERS[seq(n_ct)]
 
-    gplots::heatmap.2(stage1_res_atlas_pls_refs$proportions,
-                      trace="none",
-                      col=color_gradient(10),
-                      breaks=seq(0,1,0.1),
-                      margins=c(10,4),
-                      labRow = FALSE,
-                      RowSideColors = c(donor_type_colors, tiss_colors[1:4]))
+check_stage1_results(stage1_result = stage1_exp_wo_refs, probeset = my_probes,
+                     sample_meta_colors = factor_colors$biofluid,
+                     reference_profiles = edec_input_data$ref,
+                     ref_colors = col_colors)
 }
