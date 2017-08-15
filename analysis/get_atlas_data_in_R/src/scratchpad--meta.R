@@ -1,66 +1,89 @@
 
 
-my.combine.atlas.meta.tables <- function(df1, df2){
-    #Inputs: (2 Data Frames)
+get.doctype.tables <- function(atlas_metadata, studies, doc_type,
+                               universal_fields = T, proc_run_tables = T){
 
-    #Outputs: (1 Data Frame)
+    extract.dt.doc <- function(st){
 
-    #Suggestions: Needs Error Handling, make this generic
+        st_idx <- grep(pattern = st, x = names(studies_dat))
 
-    no_data_fill_val <- "NA"
+        st_docs_lst <- studies_dat[[st_idx]]
 
-    df1 <- as.matrix( df1 )
-    df2 <- as.matrix( df2 )
+        dt_doc_idx <- grep(pattern = doc_type, names(st_docs_lst))
 
-    r_names_1 <- df1[,1]
-    r_names_2 <- df2[,1]
+        dt_doc <- st_docs_lst[[dt_doc_idx]]
 
-    properties_not_in_df_2 <- setdiff(r_names_1, r_names_2)
-    properties_not_in_df_1 <- setdiff(r_names_2, r_names_1)
+        return(dt_doc)
+    }
 
-    n_novel_properties <- length(properties_not_in_df_1)
-    n_old_properties   <- length(properties_not_in_df_2)
+    ############################################################################
+    extract.field.names <- function(dat_table){return(dat_table[, 1])}
 
-    add_to_df1 <- (matrix(data = no_data_fill_val, ncol = ncol(df1),
-                          nrow = n_novel_properties ))
+    get.univ.fields <- function(doc_type_tables_list){
 
-    add_to_df2 <- (matrix(data = no_data_fill_val, ncol = ncol(df2),
-                          nrow = n_old_properties ))
+        dtt <- doc_type_tables_list
 
+        fn_lst <- lapply(X = dtt, FUN = extract.field.names)
 
-    colnames(add_to_df1) <- colnames(df1)
-    colnames(add_to_df2) <- colnames(df2)
+        univ <- Reduce(f = intersect, x = fn_lst)
 
+        return(univ)
+    }
 
-    rn_combined_1 <- c(r_names_1, properties_not_in_df_1)
-    rn_combined_2 <- c(r_names_2, properties_not_in_df_2)
+    ############################################################################
+    extract.univ.data <- function(dat_table, univ_fields){
 
-    df1_expanded <- rbind(df1, add_to_df1)
-    rownames(df1_expanded) <- rn_combined_1
+        rownames(dat_table) <- dat_table[, 1]
 
-    df2_expanded  <- rbind(df2, add_to_df2)
-    rownames(df2_expanded) <- rn_combined_2
+        dat_table <- dat_table[univ_fields, -1]
 
-    df2_expanded <- df2_expanded[rn_combined_1,]
+        return(dat_table)
 
-    df_merged <- cbind(df1_expanded, df2_expanded[,-1])
-    #df_merged <- cbind(rownames(df_merged), df_merged)
-    return( df_merged )
+    }
 
+    ############################################################################
+    if(doc_type == 'RU' & proc_run_tables){
+
+        ru_tbl <- get.ru.table(atlas_metadata, studies)
+
+        return(t(ru_tbl))
+
+    }
+
+    if(doc_type == 'AN' & proc_run_tables){
+
+        an_tbl <- get.ru.table(atlas_metadata, studies)
+
+        return(t(ru_tbl))
+
+    }
+
+    studies_dat <- atlas_metadata[studies]
+    print(names(studies_dat))
+
+    #get doc_type tables for all studies
+    tables <- lapply(X = names(studies_dat), extract.dt.doc)
+    print(sum(sapply(tables,dim)[2,]))
+
+    names(tables) <- names(studies_dat)
+
+    if(!universal_fields){
+
+        tables <- lapply(tables,t)
+
+        return(tables)
+
+    }
+
+    univ <- get.univ.fields(tables)
+
+    univ_dat <- lapply(X = tables, extract.univ.data, univ_fields = univ)
+
+    univ_cmbd <- Reduce(f = cbind, x = univ_dat)
+    print(dim(univ_cmbd))
+
+    return(univ_cmbd)
 }
 
-
-get_meta_args <- list(studies_url = studies_url, studies_dirs = dirs_studies[1],
-                      meta_types = meta_types, get_map = F)
-
-rds_save_output(fun = get.atlas.metadata, args = get_meta_args,
-                save_path = save_path,
-                save_as_name = 'exrna_atlas_metadata_and_map_to_samples.RDS')
-
-#b <- readRDS(file = '../get_atlas_data_in_R/interim/exrna_atlas_meta/KJENS1-aSAH_Project-2016-10-13_all_meta.RDS')
-b <- readRDS(file = '../get_atlas_data_in_R/interim/exrna_atlas_metadata_and_map_to_samples.RDS')
-sapply(X = b, FUN = length)
-sapply(X = b, FUN = function(c){sapply(X = c, FUN = dim)})
-dirs_studies
 
 

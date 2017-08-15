@@ -18,8 +18,8 @@ biocLite( c("sva", "preprocessCore"), suppressUpdates = T)
 get.qn <- preprocessCore::normalize.quantiles
 devtools::install_github("BRL-BCM/EDec")
 library(EDec)
-devtools::install_github("BRL-BCM/EDecExampleData")
-library(EDecExampleData)
+#devtools::install_github("BRL-BCM/EDecExampleData")
+#library(EDecExampleData)
 set.seed(20170620)
 
 
@@ -53,7 +53,7 @@ entex_meta <- entex_meta_all[adult_samples,]
 #entex_meta$age <- factor_to_numeric(entex_meta$age)
 #entex_meta <- subset.data.frame(x = entex_meta, subset = entex_meta$age > 37)
 
-tissues_for_analysis <- 'spleen|lung|stomach|adrenal'
+tissues_for_analysis <- 'spleen|lung|stomach|adrenal|liver'
 tissue_subset <- grep(tissues_for_analysis, entex_meta$smp_src, value = T )
 
 samp_subset <- which(entex_meta$smp_src %in% tissue_subset)
@@ -142,22 +142,24 @@ lapply(edec_input_data, dim)
 
 informative_probes <- perform.probe.selection(ref_probes =  edec_input_data$ref,
                                               ref_classes = refs_meta$smp_src,
-                                              n_markers = 40,
+                                              n_markers = 60,
                                               max_p_val = probe_sel_max_p)
 
 
 
 
 #selected_probes <- select.best.probes(informative_probes, probes_per_comparison = 15)
-tmp1 <- lapply(c(1:4), function(x){head(sort(informative_probes$one.vs.rest$t_test$p.values[,x]),20)})
+tmp1 <- lapply(c(1:4), function(x){head(sort(informative_probes$one.vs.rest$t_test$p.values[,x]),30)})
 tmp2 <- unique(names(unlist(tmp1)))
 informative_probes1 <- tmp2
 
-tmp11 <- lapply(c(1:4), function(x){head(sort(informative_probes$each.pair$t_test$p.values[,x]),20)})
+tmp11 <- lapply(c(1:4), function(x){head(sort(informative_probes$each.pair$t_test$p.values[,x]),30)})
 tmp22 <- unique(names(unlist(tmp11)))
 informative_probes2 <- tmp22
-informative_probes <- union(informative_probes1, informative_probes2)
+informative_probes <- unlist(union(informative_probes1, informative_probes2))
 expression_correlations_refs <- list(test = cor(edec_input_data$ref[informative_probes,]))
+
+
 
 #expression_correlations_refs <- lapply(X = informative_probes,
 #                                       FUN = function(probes){cor(edec_input_data$ref[probes,],use = 'complete.obs')})
@@ -196,7 +198,7 @@ sapply(X = names(expression_correlations_refs),
 
  }
 ####################################################################################################
-n_ct <- 5
+n_ct <- 8
 my_probes <- informative_probes #$max_set
 ####################################################################################################
 ## EDEC STAGE 1 ENTEX DATA
@@ -214,7 +216,7 @@ check_stage1_results(stage1_result = stage1_refs, probeset = my_probes,
 ## EDEC STAGE 1 : ON EXRNA ATLAS DATA with reference profiles
 ####################################################################################################
 refs_spike_in_idx <-  c(1:5,8) #seq_along(colnames(edec_input_data$ref ))
-refs_spike_in <- edec_input_data$ref[,refs_spike_in_idx]
+refs_spike_in <- edec_input_data$ref #[,refs_spike_in_idx]
 exp_w_refs <- cbind(edec_input_data$exp, refs_spike_in)
 
 
@@ -230,6 +232,8 @@ check_stage1_results(stage1_result = stage1_exp_w_refs, probeset = my_probes, sh
                      reference_profiles = edec_input_data$ref,
                      ref_colors =  factor_colors$refs_classes)
 
+
+View(stage1_exp_w_refs$methylation)
 
 ####################################################################################################
 ## EDEC STAGE 1 : ON EXRNA ATLAS DATA without reference profiles
@@ -248,3 +252,24 @@ check_stage1_results(stage1_result = stage1_exp_wo_refs, probeset = my_probes,
                      reference_profiles = edec_input_data$ref,
                      ref_colors = col_colors)
 }
+
+
+
+
+tissue_mirna <- read.csv2(file = "../cell_type_of_origin/input/microRNA_ORG/Expression_human.txt",
+                          sep = ",", stringsAsFactors = F)
+head(tissue_mirna)[,1:4]
+xx <- strsplit(tissue_mirna$matureform.total.copies.hsa_Adrenocarcinoma.SW.mock,split = '\t')
+xxx <- as.data.frame(Reduce(f = rbind, x = xx))
+class(xxx)
+dim(tissue_mirna)
+ttt <- cbind(xxx, tissue_mirna[,2:ncol(tissue_mirna)])
+colnames(ttt)[1:3] <- c("mature_form", "total_copies", "hsa_Adrenocarcinoma.SW.mock")
+rn <- ttt$mature_form
+ttt <- ttt[,3:ncol(ttt)]
+ttt <- apply(X = ttt, MARGIN = 2, FUN = as.numeric)
+colnames(ttt)
+ttt <- as.data.frame(ttt)
+rownames(ttt) <- rn
+bbb <- ttt[,grep("Liver|Panc", colnames(ttt))]
+head( bbb[order(bbb$hsa_Liver,decreasing = T),])

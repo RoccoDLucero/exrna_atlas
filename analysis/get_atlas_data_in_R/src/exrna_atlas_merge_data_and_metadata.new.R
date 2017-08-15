@@ -32,8 +32,9 @@ dirs_studies <- my.get.print.studies(studies_url = studies_url, print_only = F)
 
 ################################################################################
 ################################################################################
-meta_types <- c('BS', 'DO', 'EX', 'RU', 'ST', 'SU')
+meta_types <- c('BS', 'DO', 'EX', 'RU', 'ST', 'SU', 'AN')
 
+meta_rds_file <- 'exrna_atlas_metadata_no_map_to_samples.RDS'
 get_meta <- F
 if(get_meta){
 
@@ -46,19 +47,20 @@ if(get_meta){
 
     rds_save_output(fun = get.atlas.metadata, args = get_meta_args,
                     save_path = save_path,
-                    save_as_name = 'exrna_atlas_metadata_no_map_to_samples.RDS')
+                    save_as_name = meta_rds_file)
 
 }
 
 process_meta <- F
 if(process_meta){
-    meta_path <- '../get_atlas_data_in_R/interim/exrna_atlas_metadata_and_map_to_samples.RDS'
 
-    #meta <- readRDS(file = meta_path)
+    meta_path <- paste(save_path, meta_rds_file, sep = "")
 
-    meta_map <- meta$bsid_sample_map
+    meta <- readRDS(file = meta_path)
 
-    meta_map <- reformat.names(meta_map,2)
+    #meta_map <- meta$bsid_sample_map
+
+    #meta_map <- reformat.names(meta_map,2)
 
     cmbnd_meta <- lapply(X = meta_types,
                      FUN = function(dt){
@@ -226,5 +228,10 @@ if(get_rc){
     }
 
 }
+
+
+
+
+
 
 

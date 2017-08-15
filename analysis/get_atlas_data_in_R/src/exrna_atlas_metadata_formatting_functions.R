@@ -223,9 +223,9 @@ reformat.names <- function(obj, dim){
 
     dimnames(obj)[[dim]] <- make.names(names = dimnames(obj)[[dim]], unique = T)
 
-    dimnames(obj)[[dim]] <- gsub(pattern = '^X[.]+',
-                                 replacement = '',
-                                 dimnames(obj)[[dim]])
+    dimnames(obj)[[dim]] <- make.unique(gsub(pattern = '^X[.]+',
+                                             replacement = '',
+                                             dimnames(obj)[[dim]]))
 
     return(obj)
 
