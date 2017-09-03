@@ -10,12 +10,11 @@ rm(list=ls())
 pkgs <- list('gplots', 'class', 'RColorBrewer', 'stringr', 'ggplot2', 'reshape2',
           'rms', 'devtools', 'clue', 'EDec', 'tidyverse')
 lapply(pkgs, library, character.only = T)
-session_info()
 
 #library('ggbiplot')
 
-#source("~/Documents/BCM/Lab/LouiseData/sources/PAM50ExerciseFunctions.R")
-#source("~/Documents/BCM/Lab/LouiseData/sources/EDec.R")
+source("../edec_vesicle_subtypes/src/PAM50ExerciseFunctions.R")
+source("../edec_vesicle_subtypes/src/EDec.R")
 source("../edec_vesicle_subtypes/src/K_cell_number.R")
 
 ################################################################################
@@ -35,123 +34,133 @@ source("../edec_vesicle_subtypes/src/edec_vesicle_subtypes_functions.R")
 ################################################
 ##  READ IN EXCERPT READS PER MILLION OUTPUT DATA
 ################################################
+##############################################################
+## FIRST GET FILENAMES AND PATHS FOR EXCERPT RESULT .RDATA ###
+## FROM EACH NON-ATLAS STUDY:
+## --HD/LD DATA FROM LASSER ET AL
+## --LAURENT DATA FROM KIT X CONDITIONED MEDIA EXPERIMENTS
+## --GINGERAS CELLS AND SUBCELLULAR FRACTIONS FROM ENCODE
+##############################################################
 
-######  FIRST GET FILENAMES AND PATHS FOR EXCERPT RESULT .RDATA FROM EACH STUDY  ######
-## HD/LD DATA FROM LASSER ET AL:
-## LAURENT DATA FROM KIT X CONDITIONED MEDIA EXPERIMENTS:
-## GINGERAS CELLS AND SUBCELLULAR FRACTIONS
-#path <- "../edec_vesicle_subtypes/input/hd_ld_atlas_gingeras_laurent"
-path <- "../edec_vesicle_subtypes/input/lasser_atlas_laurent"
+##################################
+##### REFERENCE SIGNATURE SET ####
+## https://www.ncbi.nlm.nih.gov/sra?linkname=bioproject_sra_all&from_uid=343960
+path <- "../edec_vesicle_subtypes/input/lasser_atlas_laurent/ref"
 
-all_combined_rpm <-t(condense.post.proc.results(results_rdata_path = path,
-                                               per_million = T,
-                                               include_exogenous = F))
+lasser_rpm <- condense.post.proc.results(results_rdata_path = path,
+                                                  per_million = T,
+                                                  include_exogenous = F)
+
+lasser_rpm <- lasser_rpm[,sort(colnames(lasser_rpm))]
+
+lasser_dimnames <- get.study.specific.probes(results_rdata_path = path)
+
+lasser_rpm <- subset.small.rna(lasser_rpm,rna_in_colnames = F)
 
 ## PROCESS DIMNAMES (MAKE THIS A FUNCTION)
-rownames(all_combined_rpm) <- gsub("sample_|_fastq","",rownames(all_combined_rpm))
+#colnames(laurent_rpm) <- gsub("sample_|_fastq","",colnames(laurent_rpm))
+#change_these <- grep("hsa_piR", rownames(laurent_rpm))
+#rownames(laurent_rpm)[change_these] <- gsub(pattern = "\\|.*$",replacement = "",
+#                                            x = rownames(laurent_rpm)[change_these])
 
-gsub(pattern = "\\|.*$",replacement = "",
-     x = colnames(all_combined_rpm)[grep("hsa_piR",colnames(all_combined_rpm))])
+
+##################################
+##### NON ATLAS TARGET SET ####
+path <- "../edec_vesicle_subtypes/input/lasser_atlas_laurent/target"
+
+laurent_rpm <- condense.post.proc.results(results_rdata_path = path,
+                                               per_million = T,
+                                               include_exogenous = F)
+
+laurent_dimnames <- get.study.specific.probes(results_rdata_path = path)
 
 
-small_rna_keys <- paste("Gly|Ala|Leu|Met|Phe|Trp|Lys|Gln|Glu|Ser",
-                        "Pro|Val|Ile|Cys|Tyr|His|Arg|Asn|Asp|Thr|Mt_tRNA",
-                        "hsa-let|hsa-mi[Rr]|hsa_piR|snoRNA|snRNA|^Y_RNA",
-                        #"hsa_circ|circ",
-                        "3prime_overlapping|vaultRNA",
-                        "miRNA|sRNA|scRNA|VTRNA",
-                        sep = "|")
+laurent_rpm <- subset.small.rna(laurent_rpm, rna_in_colnames = F) 
 
-##############
-
-dim(all_combined_rpm[,grep(small_rna_keys,colnames(all_combined_rpm))])
-
-## EXRNA ATLAS DATA FOR ALL STUDIES:
+#######################################
+## EXRNA ATLAS DATA FOR ALL STUDIES: ##
 path <- "./input/exrna_atlas/Atlas_allncRNA_RPM.txt"
-atlas_rpm_all_nc <- t(read.delim(file = path, sep = "\t"))
-dim(atlas_rpm_all_nc)
-dim(atlas_rpm_all_nc[,grep(small_rna_keys,colnames(atlas_rpm_all_nc))])
-
-if(F){ ## OSCAR'S APPROACH ##
-    
-Lasser_allncRNA_RPM <- read.delim("P:/brl/proj/exrna_atlas/analysis/edec_vesicle_subtypes/input/Oscar/input/input/Lasser_HD_LD/Lasser_allncRNA_RPM.txt", 
-                                      header = T, sep = "\t", row.names = 1)
-    
-Atlas_allncRNA_RPM <- read.delim("P:/brl/proj/exrna_atlas/analysis/edec_vesicle_subtypes/input/Oscar/input/input/Atlas_Data_20170804/Atlas_allncRNA_RPM.txt", 
-                                     header = T, sep = "\t", row.names = 1)
-    
-lapply(FUN = dim, X = list(Lasser_allncRNA_RPM, Atlas_allncRNA_RPM))    
-    
-
-common.allncRNA = intersect(row.names(Lasser.allncRNA.RPM), row.names(Atlas.allncRNA.RPM.common))
-
-## GET THE RNA SPECIES COMMON TO ALL THREE DATASETS:
-## MERGE ON THESE...
+atlas_rpm_all_nc <- read.delim(file = path, sep = "\t")
 
 
-}
+atlas_rpm_all_nc <- subset.small.rna(atlas_rpm_all_nc, rna_in_colnames = F)
+
+
+################################################################################
+################################################################################
+## OSCAR'S APPROACH WAS TO GET THE RNA SPECIES COMMON TO ALL THREE DATASETS:
+## MY APPROACH WILL BE TO COMBINE DATASETS ACROSS ALL AVAILABLE PROBES
+################################################################################
+atlas_plus_nonAtlas <-  Reduce(f = combine.rpm.tables,
+                               x = list(atlas_rpm_all_nc, laurent_rpm, lasser_rpm))
+
 
 ################################################################################
 ##  SET GLOBAL PARAMETERS
 ################################################################################
+figs_dir <- "../edec_vesicle_subtypes/interim/figs/"
 
-my_palette = colorRampPalette(c("white","lightgreen","darkgreen"))(n = 29)
-col_breaks = c(seq(0.0000,0.3330,length=10), # for white
+my_palette <- colorRampPalette(c("white","lightgreen","darkgreen"))(n = 29)
+col_breaks <- c(seq(0.0000,0.3330,length=10), # for white
                seq(0.3331,0.6660,length=10), # for lightgreen
                seq(0.6661,1.0000,length=10)) # for darkgreen
 
-my_palette = colorRampPalette(c("white","lightgreen","darkgreen"))(n = 29)
-col_breaks_2 = c(seq(0.50,0.6699,length=10), # for white
+my_palette <- colorRampPalette(c("white","lightgreen","darkgreen"))(n = 29)
+col_breaks_2 <- c(seq(0.50,0.6699,length=10), # for white
                  seq(0.67,0.8399,length=10), # for lightgreen
                  seq(0.84,1.0000,length=10)) # for darkgreen
-
-
 
 ####################################
 ## SELECT RNA THAT CAN SEPARATE LD/HD
 ## SIGNATURES BASED ON EXPRESSION
 ####################################
-## T-test
-Lasser.subtypes = c("HD","HD","LD","LD")
-colors.1 = rep("white",length(Lasser.subtypes))
+## T-test PRE-NORMALIZATION
+Lasser.subtypes <- c("HD","HD","LD","LD")
+colors.1 <- rep("white",length(Lasser.subtypes))
 colors.1[Lasser.subtypes=="HD"] = "gold"
 colors.1[Lasser.subtypes=="LD"] = "violet"
 
-tTestResultOneVsRest.ncRNA = perform_t_tests_all_classes_one_vs_rest(dataMatrix = Lasser.allncRNA.RPM, classVector = Lasser.subtypes)
+tTestResultOneVsRest.ncRNA <- perform_t_tests_all_classes_one_vs_rest(dataMatrix = lasser_rpm, classVector = Lasser.subtypes)
 
-chosenProbes = c()
+chosenProbes <- c()
 for(i in 1:2){
-  sigProbes = row.names(tTestResultOneVsRest.ncRNA$P.Values[tTestResultOneVsRest.ncRNA$P.Values[,i] < 0.005,])
-  sigDiff = tTestResultOneVsRest.ncRNA$Difference.Between.Means[which(row.names(tTestResultOneVsRest.ncRNA$P.Values) %in% sigProbes), i]
-  highDiffProbes = names(tail(sort(sigDiff),100))
-  lowDiffProbes = names(head(sort(sigDiff),100))
-  chosenProbes = c(chosenProbes, highDiffProbes, lowDiffProbes)
+  sigProbes <- row.names(tTestResultOneVsRest.ncRNA$P.Values[tTestResultOneVsRest.ncRNA$P.Values[,i] < 0.005,])
+  sigDiff <- tTestResultOneVsRest.ncRNA$Difference.Between.Means[which(row.names(tTestResultOneVsRest.ncRNA$P.Values) %in% sigProbes), i]
+  highDiffProbes <- names(tail(sort(sigDiff),100))
+  lowDiffProbes <- names(head(sort(sigDiff),100))
+  chosenProbes <- c(chosenProbes, highDiffProbes, lowDiffProbes)
 }
-chosenProbes.allncRNA = unique(c(chosenProbes))
-Lasser.allncRNA.RPM.chosenProbes = Lasser.allncRNA.RPM[chosenProbes.allncRNA,]
+chosenProbes.allncRNA <- unique(c(chosenProbes))
 
-png("~/Documents/BCM/Lab/LouiseData/EDec_Analysis_Laurent_09/Stage_0/Clustering.chosenProbes.ncRNA.png",1000,1000)
+Lasser.allncRNA.RPM.chosenProbes <- lasser_rpm[chosenProbes.allncRNA,]
+
+
+## Plot pre-normalization probset expression levels (Pointless as is; set max exp level for plot)
+pdf(paste(figs_dir,"htmap_chosenprobes_prenorm.pdf", sep = ''))
+
+NA.RPM.chosenProbes, MARGIN = 1, FUN = log, base = 10)
 heatmap.2(as.matrix(Lasser.allncRNA.RPM.chosenProbes),
+heatmap.2(as.matrix(lasser_log),        
           trace="none",
           col=my_palette,
           labCol = FALSE,
           margins=c(10,10))
-dev.off()
 
-ProbesFile = file("~/Documents/BCM/Lab/LouiseData/EDec_Analysis_Laurent_09/Stage_0/chosenProbes_ncRNA.txt")
-writeLines(c(chosenProbes.allncRNA), ProbesFile)
-close(ProbesFile)
+dev.off()
 
 ###########################
 ## Normalization - allncRNA
 ###########################
-input.allncRNA = merge.Lasser.Atlas.allncRNA
-input.allncRNA.trans = t(input.allncRNA)
-input.allncRNA.trans.QN = as.data.frame(t(quantile_normalisation(input.allncRNA.trans)))
+## MERGE REFERENCE AND TARGET SETS 
+input_allncRNA = (MERGE atlas AND lasser) 
+input_allncRNA_.QN = quantile_normalisation(input.allncRNA)
 ## Plot 1
-raw.allncRNA = unlist(input.allncRNA)
-QN.allncRNA = unlist(input.allncRNA.trans.QN)
-pdf("~/Documents/BCM/Lab/LouiseData/EDec_Analysis_Laurent_09/Stage_0/Raw_vs_QN_Atlas_allncRNA.pdf")
+raw.allncRNA = 
+QN.allncRNA =
+
+    
+pdf(paste(figs_dir,"Raw_vs_QN_Atlas_allncRNA.pdf", sep = ''))
+
 plot(raw.allncRNA, QN.allncRNA)
 dev.off()
 ## Transformations with alpha

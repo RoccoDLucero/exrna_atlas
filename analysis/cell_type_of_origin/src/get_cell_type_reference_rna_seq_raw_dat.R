@@ -133,6 +133,10 @@ sra_fields  <- dbListFields(sra_con,"sra")
 exp_fields  <- dbListFields(sra_con,"experiment")
 run_fields  <- dbListFields(sra_con,"run")
 
+View(dbGetQuery(sra_con, "select * from sra where experiment_accession = 'SRX2191757'"))
+View(dbGetQuery(sra_con, "select * from sra where study_accession = 'SRP090496'"))
+View(dbGetQuery(sra_con, "select * from sra limit 200"))
+
 #Get all table names
 geo_tables <- dbListTables(geo_meta_con)
 
@@ -140,8 +144,11 @@ geo_tables <- dbListTables(geo_meta_con)
 geoConv_fields  <- dbListFields(geo_meta_con, "geoConvert")
 gse_gsm_fields  <- dbListFields(geo_meta_con, "gse_gsm")
 smatrix_fields  <- dbListFields(geo_meta_con, "sMatrix")
-View(dbGetQuery(geo_meta_con, "select * from gsm limit 12"))
+gsm_fields  <- dbListFields(geo_meta_con, "gsm")
 
+View(dbGetQuery(geo_meta_con, "select * from gsm where gsm like 'GSM23450%%'"))
+View(dbGetQuery(geo_meta_con, "select * from gsm limit 200"))
+#GSE88754
 }
 
 ####################################################################################################

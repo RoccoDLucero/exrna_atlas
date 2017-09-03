@@ -1,13 +1,12 @@
-#get_gingeras_subcell_refs_rna_seq_raw_dat.R
-
+## get_gingeras_subcell_refs_rna_seq_raw_dat.R
+## by: Rocco Lucero
+## date created: August 14, 2017
 ################################################################################
 ##  Sub-cellular fractions small rna-seq data  ##
 ################################################################################
 ## SmallRNA-seq:
-#   Tom Gingeras Encode GSE24565
-#
-#
-#
+##   Tom Gingeras Encode GSE24565
+##
 ####################################################################################################
 source("https://bioconductor.org/biocLite.R")
 biocLite('SRAdb', suppressUpdates = T)
@@ -20,66 +19,10 @@ library('openssl')
 
 ####################################################################################################
 
-get.sra.expt.info <- function(study_identifiers, query_col = 'study_accession'){
-
-    study_name <- paste("'", study_identifiers[1], "'", sep = "")
-
-    exp_rs_ID <- dbGetQuery(conn = sra_con,
-                            statement = paste( "select * from experiment",
-                                               "where", query_col, "=", study_name,
-                                               sep=" "))
-
-    #GET ADDTIONAL INFROMATION ABOUT THE SAMPLES
-    smp_rs_ID <- dbGetQuery(conn = sra_con,
-                            statement = paste("select * from sample inner join experiment on",
-                                              "sample.sample_accession=experiment.sample_accession",
-                                              "where", query_col, "=", study_name, sep = " "))
-
-    res <- list(sra_experiment = exp_rs_ID,
-                sra_expt_samples = smp_rs_ID,
-                geo_series_mtx = NULL)
-
-    res$geo_series_mtx <- getGEO(GEO = study_identifiers[2],destdir = "./input/geo_dat", GSEMatrix = F)
-
-    return(res)
-
-}
-
-move_files_to_subfolder <- function(files_vec, from_path){
-    
-    sub <- deparse(substitute(files_vec))
-    
-    sub <- paste(from_path, sub, sep = '')
-    
-    if(!dir.exists(sub)){dir.create(sub)}
-    
-    files_avail <- list.files(from_path)
-    print(files_avail)
-    
-    found_files <- intersect(files_avail, files_vec)
-    print(found_files)
-    
-    not_found <- setdiff(files_vec, files_avail)
-    
-    to_files <- paste(sub, '/', found_files, sep = '')
-    
-    from_files <- paste(from_path, found_files, sep = '')
-    
-    file.rename(from_files, to_files)
-    
-}
-
-multigrep <- function(patterns, target, ...){
-
-    xx <- sapply(X = patterns, FUN = grep, x = target)
-    Reduce(f = intersect, x = xx)
-}
-
-
 ####################################################################################################
 ######  Connect to local SRA db copy and explore data tables                                  ######
 ####################################################################################################
-######
+
 sqlfile <- '../edec_vesicle_subtypes/input/SRAmetadb.sqlite'
 
 if(!file.exists(sqlfile)){
@@ -109,6 +52,8 @@ if(F){
     sra_fields  <- dbListFields(sra_con,"sra")
     exp_fields  <- dbListFields(sra_con,"experiment")
     run_fields  <- dbListFields(sra_con,"run")
+    
+    View(dbGetQuery(sra_con, "select * from sra limit 12"))
 
     #Get all table names
     geo_tables <- dbListTables(geo_meta_con)
@@ -121,10 +66,11 @@ if(F){
 
 }
 
+
 ####################################################################################################
 ###### GET INFORMATION ABOUT SMALL-RNA-SEQ READ DATA FROM SRA FOR GEO STUDIES
 ####################################################################################################
-study_accession_ids <- list(gingeras_encode = list(geo ="GSE24565", sra = "SRP003754"))
+#study_accession_ids <- list(gingeras_encode = list(geo ="GSE24565", sra = "SRP003754"))
 
 ################################################################################
 ##### MANUALLY EXPLORE THE SRA AND GEO TABLES TO IDENTIFY DESIRED SAMPLES  #####
@@ -133,8 +79,8 @@ study_accession_ids <- list(gingeras_encode = list(geo ="GSE24565", sra = "SRP00
 
 ##################
 #Explore the available samples with:
-View(dbGetQuery(geo_meta_con, "select * from gsm where series_id = 'GSE24565' "))
-
+#gsm_subset <- (dbGetQuery(geo_meta_con, "select * from gsm where series_id = 'GSE24565' "))
+#View(gsm_subset)
 
 query <- paste(sep = " ",
                "SELECT * ",
@@ -165,8 +111,9 @@ no_txt <- grep("No special", GSE24565_all_samps_sra$sample_attribute)
 att <- GSE24565_all_samps_sra$sample_attribute
 all_treatments <- unique(gsub("^.*protocol: |protocol description.*$", "", att))
 
+## CHECK THAT ALL DESIRED SAMPLES ARE INCLUDED ##
 unaccounted_samps <- GSE24565_all_samps_sra[-(c(nuc,cel,cyt)),]
-View(unaccounted_samps)
+#View(unaccounted_samps)
 any(Reduce(intersect, list(nuc,cel,cyt)))
 
 nuc_tap     <- GSE24565_all_samps_sra[intersect(nuc,tap),]
@@ -181,9 +128,15 @@ cel_tap     <- GSE24565_all_samps_sra[intersect(cel,tap),]
 cel_cip_tap <- GSE24565_all_samps_sra[intersect(cel,cip_tap),]
 cel_no_txt  <- GSE24565_all_samps_sra[intersect(cel,no_txt),]
 
-dim(rbind(nuc_tap, nuc_cip_tap, nuc_no_txt,
-          cyt_tap, cyt_cip_tap, cyt_no_txt,
-          cel_tap, cel_cip_tap, cel_no_txt))
+sra_meta <- rbind(nuc_tap, nuc_cip_tap, nuc_no_txt,
+                  cyt_tap, cyt_cip_tap, cyt_no_txt,
+                  cel_tap, cel_cip_tap, cel_no_txt)
+
+if(F){
+meta_out <-"../edec_vesicle_subtypes/input/gingeras_subcell_meta.RDS"
+saveRDS(object = sra_meta, file = meta_out)
+}
+View(sra_meta)
 
 ##################
 
@@ -207,6 +160,44 @@ if(F){
                sra_con = sra_con, fileType = 'fastq', destDir = dest_dir)
 
 }
+
+if(F){
+    
+    ## GET ALL SAMPLES FOR REMAINING SRR527* RUNS:
+    get.remainingSRR537 <- function(run_accs, start_from = 1){
+        #run_accs <- nuc_tap$run_accession
+        rng <- start_from:length(run_accs)
+        
+        rst <- grep('SRR527', run_accs[rng], value = T)
+        
+        run_accs <- intersect(run_accs,rst)
+        
+        return(run_accs)
+        
+    }
+    
+    rst <- get.remainingSRR537(nuc_tap$run_accession,16)
+    getSRAfile(in_acc = rst ,sra_con = sra_con, fileType = 'fastq', destDir = dest_dir)
+    
+    rst <- get.remainingSRR537(cyt_tap$run_accession,16)
+    getSRAfile(in_acc = rst ,sra_con = sra_con, fileType = 'fastq', destDir = dest_dir)
+    
+    rst <- get.remainingSRR537(nuc_no_txt$run_accession)
+    getSRAfile(in_acc = rst ,sra_con = sra_con, fileType = 'fastq', destDir = dest_dir)
+    
+    rst <- get.remainingSRR537(cyt_no_txt$run_accession)
+    getSRAfile(in_acc = rst ,sra_con = sra_con, fileType = 'fastq', destDir = dest_dir)
+    
+    rst <- get.remainingSRR537(nuc_cip_tap$run_accession)
+    getSRAfile(in_acc = rst ,sra_con = sra_con, fileType = 'fastq', destDir = dest_dir)
+    
+    rst <- get.remainingSRR537(cyt_cip_tap$run_accession)
+    getSRAfile(in_acc = rst ,sra_con = sra_con, fileType = 'fastq', destDir = dest_dir)
+  
+    
+}
+
+
 
 ####################################################################################################
 ######      PREPARE ARCHIVES FOR EXCERPT RUNS
